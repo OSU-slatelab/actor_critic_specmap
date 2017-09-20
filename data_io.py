@@ -4,7 +4,6 @@ Functions for dealing with data input and output.
 """
 
 from os import path
-import _pickle as pickle
 import gzip
 import logging
 import numpy as np
