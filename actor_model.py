@@ -18,7 +18,7 @@ class Actor:
 	trained on clean speech.
 	"""
 
-	def __init__(self, input_shape, layer_size = 1024, output_frames = 11):
+	def __init__(self, input_shape, layer_size = 1024, output_frames = 11, dropout = 0.1):
 		"""
 		Create actor model.
 
@@ -44,8 +44,11 @@ class Actor:
 		self.context_frames = self.input_shape[1] - output_frames
 
 		# Layer params
-		self.dropout = tf.placeholder(dtype = tf.float32, name = "dropout")
+		self.dropout = dropout
 		self.layer_size = layer_size
+		
+		# Whether or not we're training
+		self.training = tf.placeholder(dtype = tf.bool, name = "training")
 
 		self._create_model()
 		
@@ -94,11 +97,12 @@ class Actor:
 				activation         = tf.nn.relu,
 				kernel_initializer = tf.random_normal_initializer(0, 0.02))
 
-		layer = tf.layers.dropout(
-				inputs = layer,
-				rate   = self.dropout)
-
 		layer = tf.layers.batch_normalization(
 				inputs = layer)
+
+		layer = tf.layers.dropout(
+				inputs   = layer,
+				rate     = self.dropout,
+				training = self.training)
 		
 		return layer

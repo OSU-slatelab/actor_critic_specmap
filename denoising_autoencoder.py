@@ -17,11 +17,11 @@ def input_dropout(inputs, proportion):
 	mask = np.random.binomial(1, proportion, inputs.shape)
 	return np.multiply(mask, inputs) #* (1/(1-proportion))
 
-def make_fd(inputs, actor, context_frames, train):
+def make_fd(inputs, actor, context_frames, training):
 	return {
-			actor.dropout: 0.3 if train else 0,
 			actor.inputs: input_dropout(inputs, 0.5),
 			actor.targets: inputs[:, context_frames // 2 : -context_frames // 2],
+			actor.training: training,
 	}
 
 def make_train_op(predicted_out, actual_out):
@@ -31,22 +31,29 @@ def make_train_op(predicted_out, actual_out):
 
 def make_inputs(data, batch_size, context_frames, output_frames):
 	inputs = []
+	keys = list(data.keys())
 	for i in range(batch_size):
-		key = np.random.choice(list(data.keys()))
-		index = np.random.randint(len(data[key]) - context_frames - output_frames)
-		inputs.append(data[key][index : index + context_frames + output_frames])
+		index = np.random.randint(len(data[keys[i]]) - context_frames - output_frames)
+		inputs.append(data[keys[i]][index : index + context_frames + output_frames])
 	return np.array(inputs)
+
+def read_data(offset, batch_size):
+	
+	data, lines = data_io.read_kaldi_ark_from_scp(uid=0, offset=0,
+			batch_size=batch_size, buffer_size=batch_size*10,
+			scp_fn = "/data/data2/scratch/bagchid/specGAN-tf_old/data-fbank/dev_dt_05_clean/feats.scp",
+			ark_base_dir = "/data/data2/scratch/bagchid/specGAN-tf_old/")
+
+	return data
+
 
 def main():
 	context_frames = 10
 	output_frames = 11
 	batch_size = 1024
 	frame_size = 40
-	
-	data, lines = data_io.read_kaldi_ark_from_scp(uid=0, offset=0,
-			batch_size=batch_size, buffer_size=batch_size*10,
-			scp_fn = "/data/data2/scratch/bagchid/specGAN-tf_old/data-fbank/dev_dt_05_clean/feats.scp",
-			ark_base_dir = "/data/data2/scratch/bagchid/specGAN-tf_old/")
+
+	data = read_data(0, batch_size)
 
 	actor = Actor(
 			input_shape   = (batch_size, output_frames + context_frames, frame_size),
@@ -58,12 +65,14 @@ def main():
 	with tf.Session() as sess:
 		sess.run(tf.global_variables_initializer())
 
-		for epoch in range(100):
-			inputs = make_inputs(data, batch_size, context_frames, output_frames)
-			print("Epoch", epoch, "loss:", sess.run(loss, make_fd(inputs, actor, context_frames, train=False)))
+		for epoch in range(10):
 			for batch in range(100):
 				inputs = make_inputs(data, batch_size, context_frames, output_frames)
-				sess.run(train_op, make_fd(inputs, actor, context_frames, train=True))
+				sess.run(train_op, make_fd(inputs, actor, context_frames, training=True))
+				data = read_data((batch+1) * batch_size, batch_size)
+			
+			inputs = make_inputs(data, batch_size, context_frames, output_frames)
+			print("Epoch", epoch, "loss:", sess.run(loss, make_fd(inputs, actor, context_frames, training=False)))
 
 if __name__ == "__main__":
 	main()
