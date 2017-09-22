@@ -18,7 +18,7 @@ class Actor:
 	trained on clean speech.
 	"""
 
-	def __init__(self, input_shape, layer_size = 1024, output_frames = 11, dropout = 0.1):
+	def __init__(self, input_shape, layer_size = 1024, output_frames = 11, dropout = 0.1, filters = 64):
 		"""
 		Create actor model.
 
@@ -46,6 +46,7 @@ class Actor:
 		# Layer params
 		self.dropout = dropout
 		self.layer_size = layer_size
+		self.filters = filters
 		
 		# Whether or not we're training
 		self.training = tf.placeholder(dtype = tf.bool, name = "training")
@@ -60,14 +61,14 @@ class Actor:
 		a = self._frame_output(self.inputs[:, 0 : self.context_frames + 1], reuse = False)
 
 		# Generate all the output frames
-		output = [self._frame_output(self.inputs[:, i : i + self.context_frames + 1])
+		output = [self._cnn_frame_output(self.inputs[:, i : i + self.context_frames + 1])
 				for i in range(self.output_frames)]
 
 		# Stack the output frames into a single tensor
 		self.outputs = tf.stack(output, axis = 1)
 
 
-	def _frame_output(self, inputs, reuse = True):
+	def _dnn_frame_output(self, inputs, reuse = True):
 		"""Generate the graph for a single frame of output"""
 
 		inputs = tf.reshape(inputs,
@@ -83,10 +84,9 @@ class Actor:
 			layer3 = self._dense(layer2)
 
 		with tf.variable_scope('output_layer', reuse = reuse):
-			output = tf.layers.dense(layer3, self.output_shape[2])
+			output = tf.layers.dense(output, self.output_shape[2])
 
 		return output
-
 
 	def _dense(self, inputs):
 		"""Fully connected layer, with activation, dropout, and batch norm."""
@@ -106,3 +106,40 @@ class Actor:
 				training = self.training)
 		
 		return layer
+
+	def _cnn_frame_output(self, inputs, reuse = True):
+		"""Generate the graph for a single frame of output"""
+
+		inputs = tf.expand_dims(inputs, 3)
+
+		with tf.variable_scope('actor_layer1', reuse = reuse):
+			layer1 = self._conv(inputs)
+
+		with tf.variable_scope('actor_layer2', reuse = reuse):
+			layer2 = self._conv(layer1)
+
+		with tf.variable_scope('actor_layer3', reuse = reuse):
+			layer3 = self._conv(layer2)
+
+		with tf.variable_scope('output_layer', reuse = reuse):
+			output = tf.reshape(layer3,
+					shape=(self.input_shape[0], (self.context_frames + 1) * self.input_shape[2] * self.filters))
+			output = tf.layers.dense(output, self.output_shape[2])
+
+		return output
+
+	def _conv(self, inputs):
+		"""Convolutional layer, with activation and batch norm."""
+
+		layer = tf.layers.conv2d(
+				inputs      = inputs,
+				filters     = self.filters,
+				kernel_size = 3,
+				padding     = "same",
+				activation  = tf.nn.relu)
+
+		layer = tf.layers.batch_normalization(
+				inputs = layer)
+
+		return layer
+
