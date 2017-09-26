@@ -1,0 +1,5 @@
+data-fbank
+new-exp
+*.txt
+__pycache__
+*.sh
