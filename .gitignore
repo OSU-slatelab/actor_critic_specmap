@@ -3,3 +3,5 @@ new-exp
 *.txt
 __pycache__
 *.sh
+*.pyc
+*.swp
