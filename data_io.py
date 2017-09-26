@@ -43,7 +43,35 @@ def np_from_text(text_fn, phonedict, txt_base_dir=""):
         utt_mat[i] = phonedict[text[i]]
         ark_dict[utt_id] = utt_mat
     return ark_dict
- 
+
+def read_senones_from_text(uid, offset, batch_size, buffer_size, senone_fn, senone_base_dir=""): 
+    senonedict = {}
+    totframes = 0
+    lines = 0
+    with open(senone_fn) as f:
+        for line in f:
+            lines += 1
+            if lines<=uid:
+                continue
+            if line == "":
+                continue
+            A = []
+            utt_id = line.split()[0]
+            prev_word = ""
+            for word in line.split():
+                if prev_word=='[':
+                    A.append(word)
+                prev_word=word
+            totframes += len(A)
+            senone_mat = np.zeros((len(A),1999))
+            for i in range(len(A)):
+                senone_mat[i][int(A[i])] = 1
+            senonedict[utt_id] = senone_mat
+            if totframes>=(batch_size*buffer_size-offset):
+                break
+
+    return senonedict, lines
+            
 def read_kaldi_ark_from_scp(uid, offset, batch_size, buffer_size, scp_fn, ark_base_dir=""):
     """
     Read a binary Kaldi archive and return a dict of Numpy matrices, with the
