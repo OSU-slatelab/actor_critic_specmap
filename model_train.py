@@ -15,6 +15,7 @@ import sys
 from data_io import read_kaldi_ark_from_scp, read_senones_from_text
 from six.moves import xrange 
 
+from critic_model import Critic
 
 data_base_dir = os.getcwd()
 parser = argparse.ArgumentParser()
@@ -37,10 +38,8 @@ parser.add_argument("--cunits", type=int, default=1024)
 parser.add_argument("--input_featdim", type=int, default=40)
 parser.add_argument("--senones", type=int, default=1999)
 parser.add_argument("--context", type=int, default=5)
-parser.add_argument("--epsilon", type=float, default=1e-3, help="parameter for batch normalization")
-parser.add_argument("--decay", type=float, default=0.999, help="parameter for batch normalization")
 parser.add_argument("--max_global_norm", type=float, default=5.0, help="global max norm for clipping")
-parser.add_argument("--keep_prob", type=float, default=0.5, help="keep percentage of neurons")
+parser.add_argument("--dropout", type=float, default=0.5, help="percentage of neurons to drop")
 a = parser.parse_args()
 
 def read_mats(uid, offset, file_name):
@@ -55,88 +54,18 @@ def read_senones(uid, offset, file_name):
     senone_dict,uid = read_senones_from_text(uid, offset, a.batch_size, a.buffer_size, scp_fn, data_base_dir)
     return senone_dict,uid
 
-def lrelu(x, a):
-    with tf.name_scope("lrelu"):
-        # adding these together creates the leak part and linear part
-        # then cancels them out by subtracting/adding an absolute value term
-        # leak: a*x/2 - a*abs(x)/2
-        # linear: x/2 + abs(x)/2
+def train_critic(critic, targets):
+    with tf.name_scope('critic_loss_single'):
+        loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=critic.outputs, labels=targets)
+        critic_loss_single = tf.reduce_mean(loss)
 
-        # this block looks like it has 2 inputs on the graph unless we do this
-        x = tf.identity(x)
-        return (0.5 * (1 + a)) * x + (0.5 * (1 - a)) * tf.abs(x)
-
-
-def batch_norm(x, shape, training):
-    #Assume 2d [batch, values] tensor
-    beta = tf.get_variable(name='beta', shape=shape[-1], initializer=tf.constant_initializer(0.0)
-                               , trainable=True)
-    gamma = tf.get_variable(name='gamma', shape=shape[-1], initializer=tf.random_normal_initializer(1.0, 0.02),
-                                trainable=True)
-    pop_mean = tf.get_variable('pop_mean',
-                               shape[-1],
-                               initializer=tf.constant_initializer(0.0),
-                               trainable=False)
-    pop_var = tf.get_variable('pop_var',
-                              shape[-1],
-                              initializer=tf.constant_initializer(1.0),
-                              trainable=False)
-    batch_mean, batch_var = tf.nn.moments(x, [0])
-
-    train_mean_op = tf.assign(pop_mean, pop_mean * a.decay + batch_mean * (1 - a.decay))
-    train_var_op = tf.assign(pop_var, pop_var * a.decay + batch_var * (1 - a.decay))
-
-    def batch_statistics():
-        with tf.control_dependencies([train_mean_op, train_var_op]):
-            return tf.nn.batch_normalization(x, batch_mean, batch_var, beta, gamma, a.epsilon)
-
-    def population_statistics():
-        return tf.nn.batch_normalization(x, pop_mean, pop_var, beta, gamma, a.epsilon)
-
-    return tf.cond(training, batch_statistics, population_statistics)
-
-
-def create_critic(inputs, is_training):
-
-    last_layer = inputs
-    shape = (a.input_featdim*(2*a.context+1),a.cunits)
-    for i in range(1, a.clayers+1):
-        with tf.variable_scope("hidden%d"%i):
-            weight = tf.get_variable("weight", shape, dtype=tf.float32, initializer = tf.random_normal_initializer(0,0.02))
-            bias = tf.get_variable("bias", shape[-1], initializer=tf.zeros_initializer())
-            linear = tf.matmul(last_layer, weight) + bias
-            if i==1:
-                bn = linear
-            else:
-                bn = batch_norm(linear, shape, is_training)
-            hidden = lrelu(bn,0.3)
-        shape = [a.cunits, a.cunits]
-        last_layer = hidden
-   
-    shape = [a.cunits,a.senones]
-    with tf.variable_scope('output'):
-        weight = tf.get_variable("weight",
-                              shape,
-                              dtype=tf.float32,
-                              initializer=tf.random_normal_initializer(0,0.02))
-        bias = tf.get_variable("bias", shape[-1], initializer=tf.zeros_initializer())
-        linear = tf.matmul(last_layer, weight) + bias
-        out = linear
-    return out
-
-def train_critic(inputs, targets, is_training, keep_prob):
-    with tf.variable_scope('critic'):
-        outputs = create_critic(inputs, is_training)
-
-        with tf.name_scope('critic_loss_single'):
-             critic_loss_single = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=outputs, labels=targets))
-        with tf.name_scope('critic_train'):
-            critic_tvars = [var for var in tf.trainable_variables() if 'critic' in var.name]
-            critic_grads = tf.gradients(critic_loss_single, critic_tvars)
-            critic_grads, _ = tf.clip_by_global_norm(critic_grads, clip_norm=a.max_global_norm)
-            critic_grad_var_pairs = zip(critic_grads, critic_tvars)
-            critic_optim = tf.train.RMSPropOptimizer(a.lr)
-            critic_train = critic_optim.apply_gradients(critic_grad_var_pairs)
+    with tf.name_scope('critic_train'):
+        critic_tvars = [var for var in tf.trainable_variables() if 'critic' in var.name]
+        critic_grads = tf.gradients(critic_loss_single, critic_tvars)
+        critic_grads, _ = tf.clip_by_global_norm(critic_grads, clip_norm=a.max_global_norm)
+        critic_grad_var_pairs = zip(critic_grads, critic_tvars)
+        critic_optim = tf.train.RMSPropOptimizer(a.lr)
+        critic_train = critic_optim.apply_gradients(critic_grad_var_pairs)
 
     return critic_loss_single, critic_train
 
@@ -228,11 +157,9 @@ def placeholder_inputs():
     shape = a.input_featdim*(2*a.context+1)
     frame_placeholder = tf.placeholder(tf.float32, shape=(None,shape), name="frame_placeholder")
     senone_placeholder = tf.placeholder(tf.float32, shape=(None,a.senones), name="senone_placeholder")
-    is_training = tf.placeholder(tf.bool, name="is_training")
-    keep_prob = tf.placeholder(tf.float32, name="keep_prob")
-    return frame_placeholder, senone_placeholder, is_training, keep_prob
+    return frame_placeholder, senone_placeholder
 
-def do_eval(sess, critic_loss_single, frame_pl, senone_pl, is_training, keep_prob):
+def do_eval(sess, critic_loss_single, frame_pl, senone_pl, critic):
     config = init_config()
     tot_loss_epoch = 0
     totframes = 0
@@ -240,8 +167,7 @@ def do_eval(sess, critic_loss_single, frame_pl, senone_pl, is_training, keep_pro
     start_time = time.time()
     while(True):
         feed_dict, config = fill_feed_dict(frame_pl, senone_pl, config, a.frame_dev_file, a.senone_dev_file, shuffle=False)
-        feed_dict[is_training] = False 
-        feed_dict[keep_prob] = 1.0
+        feed_dict[critic.training] = False 
         result = sess.run(critic_loss_single, feed_dict=feed_dict)
         tot_loss_epoch += feed_dict[frame_pl].shape[0]*result
         totframes += feed_dict[frame_pl].shape[0]
@@ -260,9 +186,21 @@ def run_training():
         os.makedirs(a.exp_name)
     tot_loss_epoch = 0
     avg_loss_epoch = 0
+
+
     with tf.Graph().as_default():
-        frame_pl, senone_pl, is_training, keep_prob = placeholder_inputs()
-        critic_loss_single, critic_train  = train_critic(frame_pl, senone_pl, is_training, keep_prob)
+        frame_pl, senone_pl = placeholder_inputs()
+
+        # Define our critic model
+        with tf.variable_scope('critic'):
+            critic = Critic(frame_pl,
+                input_size  = a.input_featdim*(2*a.context+1),
+                layer_size  = a.cunits,
+                layers      = a.clayers,
+                output_size = a.senones,
+                dropout     = a.dropout)
+
+        critic_loss_single, critic_train  = train_critic(critic, senone_pl)
         init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
         all_vars = tf.global_variables()
         saver = tf.train.Saver([var for var in all_vars])
@@ -296,9 +234,8 @@ def run_training():
             config = init_config()
             for step in range(totbatches_train):
                 feed_dict, config = fill_feed_dict(frame_pl, senone_pl, config, a.frame_train_file, a.senone_train_file, shuffle=True)
-                feed_dict[is_training] = True
-                feed_dict[keep_prob] = a.keep_prob
 
+                feed_dict[critic.training] = True
                 critic_loss, _ = sess.run([critic_loss_single, critic_train], feed_dict=feed_dict)
                 tot_loss_epoch += feed_dict[frame_pl].shape[0]*critic_loss
             avg_loss_epoch = float(tot_loss_epoch)/totframes_train
@@ -309,8 +246,7 @@ def run_training():
                    % ((main_step+1), avg_loss_epoch,duration))
             
             print ('Eval step:')
-            eval_loss = do_eval(sess, critic_loss_single, frame_pl,
-                                          senone_pl, is_training, keep_prob)
+            eval_loss = do_eval(sess, critic_loss_single, frame_pl, senone_pl, critic)
                  
         save_path = saver.save(sess, os.path.join(a.exp_name,"model.ckpt"+str(eval_loss)), global_step=main_step)
         main_step += 1
