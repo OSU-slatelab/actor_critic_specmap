@@ -6,6 +6,7 @@ import tensorflow as tf
 import numpy as np
 import argparse
 import os
+import sys
 import time
 from data_io import DataLoader
 
@@ -102,6 +103,9 @@ def do_train(sess, train_ops, critic, totframes_train):
     # Iterate dataset
     totbatches_train = int(totframes_train/a.batch_size) + 1
     for step in range(totbatches_train):
+
+        update_progressbar(step / totbatches_train)
+
         frame_batch, senone_batch = loader.make_inputs()
 
         feed_dict = {
@@ -120,6 +124,14 @@ def do_train(sess, train_ops, critic, totframes_train):
     duration = time.time() - start_time
 
     return avg_loss_epoch, duration
+
+def update_progressbar(progress):
+    """ Make a very basic progress bar """
+
+    length = 30
+    intprog = int(round(progress * length))
+    sys.stdout.write("\r[{0}] {1:2.1f}%".format("#"*intprog + "-"*(length-intprog), progress*100))
+    sys.stdout.flush()
 
 def run_training():
     """ Define our model and train it """
@@ -161,7 +173,7 @@ def run_training():
             print('Epoch %d' % epoch)
 
             train_loss, duration = do_train(sess, train_ops, critic, totframes_train)
-            print ('Train loss: %.6f (%.3f sec)' % (train_loss, duration))
+            print ('\nTrain loss: %.6f (%.3f sec)' % (train_loss, duration))
 
             eval_loss, duration = do_eval(sess, train_ops[0], critic)
             print('Eval loss: %.6f (%.3f sec)' % (eval_loss, duration))
