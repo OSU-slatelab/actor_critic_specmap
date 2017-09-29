@@ -49,9 +49,9 @@ def read_senones(uid, offset, file_name):
     senone_dict,uid = read_senones_from_text(uid, offset, a.batch_size, a.buffer_size, scp_fn, data_base_dir)
     return senone_dict,uid
 
-def train_critic(critic, targets):
+def train_critic(outputs, targets):
     with tf.name_scope('critic_loss_single'):
-        loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=critic.outputs, labels=targets)
+        loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=outputs, labels=targets)
         critic_loss_single = tf.reduce_mean(loss)
 
     with tf.name_scope('critic_train'):
@@ -81,44 +81,49 @@ def init_config():
                 'perm':A}
     return config
 
+def create_buffer(uid, offset, offset_frames, offset_senones, frame_file, senone_file):
+    ark_dict,uid_new= read_mats(uid,offset,frame_file)
+    senone_dict,uid_new = read_senones(uid,offset,senone_file)
+
+    ids = sorted(ark_dict.keys())
+    mats = [ark_dict[i] for i in ids]
+    mats2 = np.vstack(mats)
+    mats2 = np.concatenate((offset_frames,mats2),axis=0)
+
+    mats_senone = [senone_dict[i] for i in ids]
+    mats2_senone = np.vstack(mats_senone)
+    mats2_senone = np.concatenate((offset_senones,mats2_senone),axis=0)
+        
+    if mats2.shape[0]>=(a.batch_size*a.buffer_size):
+        offset_frames = mats2[a.batch_size*a.buffer_size:]
+        mats2 = mats2[:a.batch_size*a.buffer_size]
+        offset = offset_frames.shape[0]
+        offset_senones = mats2_senone[a.batch_size*a.buffer_size:]
+        mats2_senone = mats2_senone[:a.batch_size*a.buffer_size]
+        
+    return mats2, mats2_senone, uid_new, offset
+
+
 def fill_feed_dict(frame_pl, senone_pl, config, frame_file, senone_file, shuffle):
 
     batch_index = config['batch_index']
     offset_frames = config['offset_frames']
     offset_senones = config['offset_senones']
     A = config['perm']
-
-    def create_buffer(uid, offset):
-        ark_dict,uid_new= read_mats(uid,offset,frame_file)
-        senone_dict,uid_new = read_senones(uid,offset,senone_file)
-
-        ids = sorted(ark_dict.keys())
-        mats = [ark_dict[i] for i in ids]
-        mats2 = np.vstack(mats)
-        nonlocal offset_frames
-        mats2 = np.concatenate((offset_frames,mats2),axis=0)
-
-        mats_senone = [senone_dict[i] for i in ids]
-        mats2_senone = np.vstack(mats_senone)
-        nonlocal offset_senones
-        mats2_senone = np.concatenate((offset_senones,mats2_senone),axis=0)
-            
-        if mats2.shape[0]>=(a.batch_size*a.buffer_size):
-            offset_frames = mats2[a.batch_size*a.buffer_size:]
-            mats2 = mats2[:a.batch_size*a.buffer_size]
-            offset = offset_frames.shape[0]
-            offset_senones = mats2_senone[a.batch_size*a.buffer_size:]
-            mats2_senone = mats2_senone[:a.batch_size*a.buffer_size]
-            
-        return mats2, mats2_senone, uid_new, offset
-
     if batch_index==0:
-        frame_buffer, senone_buffer, uid_new, offset = create_buffer(config['uid'], config['offset'])
+        frame_buffer, senone_buffer, uid_new, offset = create_buffer(
+                config['uid'],
+                config['offset'],
+                offset_frames,
+                offset_senones,
+                frame_file,
+                senone_file)
+
         frame_buffer = np.pad(frame_buffer,
                                     ((a.context,),(0,)),
                                     'constant',
                                     constant_values=0)
-        if shuffle==True:
+        if shuffle:
             A = np.random.permutation(senone_buffer.shape[0])
         else:
             A = np.arange(senone_buffer.shape[0])
@@ -195,7 +200,7 @@ def run_training():
                 output_size = a.senones,
                 dropout     = a.dropout)
 
-        critic_loss_single, critic_train  = train_critic(critic, senone_pl)
+        critic_loss_single, critic_train  = train_critic(critic.outputs, senone_pl)
         init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
         all_vars = tf.global_variables()
         saver = tf.train.Saver([var for var in all_vars])
