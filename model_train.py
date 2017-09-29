@@ -7,13 +7,8 @@ import numpy as np
 import argparse
 import os
 from os import path
-import random
-import collections
-import math
 import time
-import sys
 from data_io import read_kaldi_ark_from_scp, read_senones_from_text
-from six.moves import xrange 
 
 from critic_model import Critic
 
@@ -250,23 +245,6 @@ def run_training():
                  
         save_path = saver.save(sess, os.path.join(a.exp_name,"model.ckpt"+str(eval_loss)), global_step=main_step)
         main_step += 1
-
-def find_min_max(scp_file):
-    minimum = float("inf")
-    maximum = -float("inf")
-    uid = 0
-    offset = 0
-    ark_dict, uid = read_mats(uid, offset, scp_file)
-    while ark_dict:
-        for key in ark_dict.keys():
-            mat_max = np.amax(ark_dict[key])
-            mat_min = np.amin(ark_dict[key])
-            if mat_max > maximum:
-                maximum = mat_max
-            if mat_min < minimum:
-                minimum = mat_min
-        ark_dict, uid = read_mats(uid, offset, scp_file)
-    return minimum, maximum
 
 def main():
     run_training()
