@@ -13,6 +13,7 @@ from data_io import DataLoader
 from critic_model import Critic
 
 parser = argparse.ArgumentParser()
+parser.add_argument("--base_directory", default=os.getcwd(), help="The directory the data is in")
 parser.add_argument("--frame_train_file", default="data-fbank/train_si84_clean/feats.scp", help="The input feature file for training")
 parser.add_argument("--frame_dev_file", default="data-fbank/dev_dt_05_clean/feats.scp", help="The input feature file for cross-validation")
 parser.add_argument("--senone_train_file", default="clean_labels_train.txt", help="The senone file for clean training labels")
@@ -49,6 +50,7 @@ def do_eval(sess, critic_loss_single, critic):
 
     # Create loader
     loader = DataLoader(
+        base_dir    = a.base_directory,
         frame_file  = a.frame_dev_file,
         senone_file = a.senone_dev_file,
         batch_size  = a.batch_size,
@@ -89,6 +91,7 @@ def do_train(sess, train_ops, critic, totframes_train):
 
     # Create loader for data
     loader = DataLoader(
+            base_dir    = a.base_directory,
             frame_file  = a.frame_train_file,
             senone_file = a.senone_train_file,
             batch_size  = a.batch_size,

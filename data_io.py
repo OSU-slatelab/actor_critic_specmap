@@ -129,16 +129,15 @@ def kaldi_write_mats(ark_path, utt_id, utt_mat):
 class DataLoader:
     """ Class for loading features and senone labels from file into a buffer, and batching. """
 
-    def __init__(self, frame_file, senone_file, batch_size, buffer_size, context, shuffle):
+    def __init__(self, base_dir, frame_file, senone_file, batch_size, buffer_size, context, shuffle):
         """Initialize the data loader including filling the buffer"""
+        self.data_dir = base_dir
         self.frame_file = frame_file
         self.senone_file = senone_file
         self.batch_size = batch_size
         self.buffer_size = buffer_size
         self.context = context
         self.shuffle = shuffle
-
-        self.data_dir = os.getcwd()
         
         self.batch_index = 0
         self.uid = 0
