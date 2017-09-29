@@ -3,7 +3,7 @@ Functions for dealing with data input and output.
 
 """
 
-from os import path
+import os
 import gzip
 import logging
 import numpy as np
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def smart_open(filename, mode=None):
     """Opens a file normally or using gzip based on the extension."""
-    if path.splitext(filename)[-1] == ".gz":
+    if os.path.splitext(filename)[-1] == ".gz":
         if mode is None:
             mode = "rb"
         return gzip.open(filename, mode)
@@ -95,7 +95,7 @@ def read_kaldi_ark_from_scp(uid, offset, batch_size, buffer_size, scp_fn, ark_ba
                 continue
             utt_id, path_pos = line.replace("\n", "").split(" ")
             ark_path, pos = path_pos.split(":")
-            ark_path = path.join(ark_base_dir, ark_path)
+            ark_path = os.path.join(ark_base_dir, ark_path)
             ark_read_buffer = smart_open(ark_path, "rb")
             ark_read_buffer.seek(int(pos),0)
             header = struct.unpack("<xcccc", ark_read_buffer.read(5))
@@ -125,3 +125,121 @@ def kaldi_write_mats(ark_path, utt_id, utt_mat):
     ark_write_buf.write(struct.pack('<bi', 4, cols))
     ark_write_buf.write(utt_mat)
 
+
+class DataLoader:
+    """ Class for loading features and senone labels from file into a buffer, and batching. """
+
+    def __init__(self, frame_file, senone_file, batch_size, buffer_size, context, shuffle):
+        """Initialize the data loader including filling the buffer"""
+        self.frame_file = frame_file
+        self.senone_file = senone_file
+        self.batch_size = batch_size
+        self.buffer_size = buffer_size
+        self.context = context
+        self.shuffle = shuffle
+
+        self.data_dir = os.getcwd()
+        
+        self.batch_index = 0
+        self.uid = 0
+        self.offset = 0
+
+        self.fill_buffer()
+
+
+    def read_mats(self):
+        """ Read features from file into a buffer """
+        #Read a buffer containing buffer_size*batch_size+offset 
+        #Returns a line number of the scp file
+        scp_fn = os.path.join(self.data_dir, self.frame_file)
+        ark_dict, uid = read_kaldi_ark_from_scp(
+                self.uid,
+                self.offset,
+                self.batch_size,
+                self.buffer_size,
+                scp_fn,
+                self.data_dir)
+
+        return ark_dict, uid
+
+    def read_senones(self):
+        """ Read senones from file """
+        scp_fn = os.path.join(self.data_dir, self.senone_file)
+        senone_dict, uid = read_senones_from_text(
+                self.uid,
+                self.offset,
+                self.batch_size,
+                self.buffer_size,
+                scp_fn,
+                self.data_dir)
+
+        return senone_dict, uid
+
+    def fill_buffer(self):
+        """ Read data from files into buffers """
+
+        # Read data
+        ark_dict, uid_new    = self.read_mats()
+        senone_dict, uid_new = self.read_senones()
+        self.uid = uid_new
+
+        ids = sorted(ark_dict.keys())
+
+        if not hasattr(self, 'offset_frames'):
+            self.offset_frames = np.empty((0, ark_dict[ids[0]].shape[1]), np.float32)
+
+        if not hasattr(self, 'offset_senones'):
+            self.offset_senones = np.empty((0, senone_dict[ids[0]].shape[1]), np.float32)
+
+        # Create frame buffer
+        mats = [ark_dict[i] for i in ids]
+        mats2 = np.vstack(mats)
+        mats2 = np.concatenate((self.offset_frames, mats2),axis=0)
+
+        # Create senone buffer
+        mats_senone = [senone_dict[i] for i in ids]
+        mats2_senone = np.vstack(mats_senone)
+        mats2_senone = np.concatenate((self.offset_senones, mats2_senone), axis=0)
+
+        # Put one batch into the offset frames
+        cutoff = self.batch_size * self.buffer_size
+        if mats2.shape[0] >= cutoff:
+            offset_frames = mats2[cutoff:]
+            mats2 = mats2[:cutoff]
+            self.offset = offset_frames.shape[0]
+            offset_senones = mats2_senone[cutoff:]
+            mats2_senone = mats2_senone[:cutoff]
+
+        mats2 = np.pad(mats2,
+                    ((self.context,),(0,)),
+                    'constant',
+                    constant_values=0)
+
+        # Generate a random permutation of indexes
+        if self.shuffle:
+            self.indexes = np.random.permutation(mats2_senone.shape[0])
+        else:
+            self.indexes = np.arange(mats2_senone.shape[0])
+
+        self.frame_buffer = mats2
+        self.senone_buffer = mats2_senone
+
+    def make_inputs(self):
+        """ Make a batch of frames and senones """
+
+        start = self.batch_index * self.batch_size
+        end = min((self.batch_index+1) * self.batch_size, self.senone_buffer.shape[0])
+
+        # Collect the data 
+        frame_batch = np.stack((self.frame_buffer[i:i+1+2*self.context,].flatten()
+            for i in self.indexes[start:end]), axis = 0)
+        senone_batch = self.senone_buffer[self.indexes[start:end]]
+
+        # Increment batch, and if necessary re-fill buffer
+        self.batch_index += 1
+        if self.batch_index * self.batch_size >= self.senone_buffer.shape[0]:
+            self.batch_index = 0
+            self.fill_buffer()
+
+        return frame_batch, senone_batch
+     

@@ -77,6 +77,7 @@ class Critic:
     def __init__(self,
             inputs,
             input_size,
+            labels,
             layer_size  = 1024,
             layers      = 6,
             output_size = 1999,
@@ -87,14 +88,23 @@ class Critic:
         Params:
          * inputs : Tensor
             The input placeholder or tensor from actor
+         * input_size : tuple
+            Dimensions of the input
+         * labels : Tensor
+            The placeholder storing labels
          * layer_size : int
-            Number of neurons per layer
-         * output_frames : int
-            Number of output frames (should be the same as input frames for critic)
+            The size of the DNN layers
+         * layers : int
+            Number of layers
+         * output_size : int
+            Number of classes to output
+         * dropout : float
+            Proportion of neurons to drop
         """
 
         self.inputs = inputs
         self.input_size = input_size
+        self.labels = labels
         
         # Layer params
         self.dropout = dropout
@@ -109,7 +119,7 @@ class Critic:
         
 
     def _create_model(self):
-        """Put together all the parts of the critic model."""
+        """ Put together all the parts of the critic model. """
 
         with tf.variable_scope("hidden1"):
           hidden = feedforward_layer(self.inputs, (self.input_size, self.layer_size))
@@ -128,3 +138,21 @@ class Critic:
         with tf.variable_scope('output'):
             self.outputs = feedforward_layer(hidden, (self.layer_size, self.output_size))
 
+
+    def create_train_ops(self, max_global_norm, learning_rate):
+        """ Define the loss and training ops """
+
+        with tf.name_scope('critic_loss_single'):
+            loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=self.outputs, labels=self.labels)
+            critic_loss_single = tf.reduce_mean(loss)
+
+        with tf.name_scope('critic_train'):
+            critic_tvars = [var for var in tf.trainable_variables() if 'critic' in var.name]
+            critic_grads = tf.gradients(critic_loss_single, critic_tvars)
+            critic_grads, _ = tf.clip_by_global_norm(critic_grads, clip_norm=max_global_norm)
+            critic_grad_var_pairs = zip(critic_grads, critic_tvars)
+            critic_optim = tf.train.RMSPropOptimizer(learning_rate)
+            critic_train = critic_optim.apply_gradients(critic_grad_var_pairs)
+
+        return critic_loss_single, critic_train
+        
