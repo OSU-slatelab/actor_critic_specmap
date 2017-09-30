@@ -37,14 +37,6 @@ parser.add_argument("--max_global_norm", type=float, default=5.0, help="global m
 parser.add_argument("--dropout", type=float, default=0.5, help="percentage of neurons to drop")
 a = parser.parse_args()
 
-def placeholder_inputs():
-    """ Generate placeholders """
-
-    shape = a.input_featdim*(2*a.context+1)
-    frame_placeholder = tf.placeholder(tf.float32, shape=(None,shape), name="frame_placeholder")
-    senone_placeholder = tf.placeholder(tf.float32, shape=(None,a.senones), name="senone_placeholder")
-    return frame_placeholder, senone_placeholder
-
 def do_eval(sess, critic_loss_single, critic):
     """ Compute loss over validation set """
 
@@ -144,13 +136,13 @@ def run_training():
         os.makedirs(a.exp_name)
 
     with tf.Graph().as_default():
-        frame_pl, senone_pl = placeholder_inputs()
+        shape = (None, a.input_featdim*(2*a.context+1))
+        frame_placeholder = tf.placeholder(tf.float32, shape=shape, name="frame_placeholder")
 
         # Define our critic model
         with tf.variable_scope('critic'):
             critic = Critic(
-                inputs      = frame_pl,
-                labels      = senone_pl,
+                inputs      = frame_placeholder,
                 input_size  = a.input_featdim*(2*a.context+1),
                 layer_size  = a.cunits,
                 layers      = a.clayers,

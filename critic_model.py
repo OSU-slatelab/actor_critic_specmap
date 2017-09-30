@@ -77,7 +77,6 @@ class Critic:
     def __init__(self,
             inputs,
             input_size,
-            labels,
             layer_size  = 1024,
             layers      = 6,
             output_size = 1999,
@@ -104,7 +103,6 @@ class Critic:
 
         self.inputs = inputs
         self.input_size = input_size
-        self.labels = labels
         
         # Layer params
         self.dropout = dropout
@@ -112,8 +110,9 @@ class Critic:
         self.layers = layers
         self.output_size = output_size
         
-        # Whether or not we're training
+        # Placeholders
         self.training = tf.placeholder(dtype = tf.bool, name = "training")
+        self.labels = tf.placeholder(dtype = tf.float32, shape = (None, output_size), name = "labels")
 
         self._create_model()
         
