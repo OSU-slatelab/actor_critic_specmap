@@ -141,20 +141,20 @@ class Critic:
             self.outputs = feedforward_layer(hidden, (self.layer_size, self.output_size))
 
 
-    def create_train_ops(self, max_global_norm, learning_rate):
+    def create_train_ops(self, max_global_norm, learning_rate, var_list=None):
         """ Define the loss and training ops """
 
-        with tf.name_scope('critic_loss_single'):
-            loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=self.outputs, labels=self.labels)
-            critic_loss_single = tf.reduce_mean(loss)
+        loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=self.outputs, labels=self.labels)
+        loss_single = tf.reduce_mean(loss)
 
-        with tf.name_scope('critic_train'):
-            critic_tvars = [var for var in tf.trainable_variables() if 'critic' in var.name]
-            critic_grads = tf.gradients(critic_loss_single, critic_tvars)
-            critic_grads, _ = tf.clip_by_global_norm(critic_grads, clip_norm=max_global_norm)
-            critic_grad_var_pairs = zip(critic_grads, critic_tvars)
-            critic_optim = tf.train.RMSPropOptimizer(learning_rate)
-            critic_train = critic_optim.apply_gradients(critic_grad_var_pairs)
+        if var_list is None:
+            var_list = tf.trainable_variables()
 
-        return critic_loss_single, critic_train
+        grads = tf.gradients(loss_single, var_list)
+        grads, _ = tf.clip_by_global_norm(grads, clip_norm=max_global_norm)
+        grad_var_pairs = zip(grads, var_list)
+        optim = tf.train.RMSPropOptimizer(learning_rate)
+        train = optim.apply_gradients(grad_var_pairs)
+
+        return loss_single, train
         

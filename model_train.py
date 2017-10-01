@@ -149,10 +149,12 @@ def run_training():
                 dropout     = a.dropout)
 
         # Define ops
-        train_ops = critic.create_train_ops(a.max_global_norm, a.lr)
+        var_list = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='critic')
+        train_ops = critic.create_train_ops(a.max_global_norm, a.lr, var_list)
         init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
-        all_vars = tf.global_variables()
-        saver = tf.train.Saver([var for var in all_vars])
+        saver = tf.train.Saver()
+
+        # Begin session
         sess = tf.Session()
         sess.run(init)  
         
