@@ -65,10 +65,10 @@ class Actor:
         """Put together all the parts of the actor model."""
 
         # Initialize graph
-        a = self._cnn_frame_output(self.inputs[:, 0 : self.context_frames + 1], reuse = False)
+        a = self._dnn_frame_output(self.inputs[:, 0 : self.context_frames + 1], reuse = False)
 
         # Generate all the output frames
-        output = [self._cnn_frame_output(self.inputs[:, i : i + self.context_frames + 1])
+        output = [self._dnn_frame_output(self.inputs[:, i : i + self.context_frames + 1])
                 for i in range(self.output_frames)]
 
         # Stack the output frames into a single tensor
@@ -79,14 +79,14 @@ class Actor:
         """Generate the graph for a single frame of output"""
 
         layer = tf.reshape(inputs,
-                shape = (self.input_shape[0], (self.context_frames + 1) * self.input_shape[2]))
+                shape = (-1, (self.context_frames + 1) * self.input_shape[2]))
 
         for i in range(self.layers):
             with tf.variable_scope('actor_layer' + str(i), reuse = reuse):
                 layer = self._dense(layer)
 
         with tf.variable_scope('output_layer', reuse = reuse):
-            output = tf.layers.dense(output, self.output_shape[2])
+            output = tf.layers.dense(layer, self.output_shape[2])
 
         return output
 
