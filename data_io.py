@@ -129,14 +129,23 @@ def kaldi_write_mats(ark_path, utt_id, utt_mat):
 class DataLoader:
     """ Class for loading features and senone labels from file into a buffer, and batching. """
 
-    def __init__(self, base_dir, frame_file, senone_file, batch_size, buffer_size, context, shuffle):
-        """Initialize the data loader including filling the buffer"""
+    def __init__(self,
+            base_dir,
+            frame_file,
+            senone_file,
+            batch_size,
+            buffer_size,
+            context,
+            out_frames,
+            shuffle):
+        """ Initialize the data loader including filling the buffer """
         self.data_dir = base_dir
         self.frame_file = frame_file
         self.senone_file = senone_file
         self.batch_size = batch_size
         self.buffer_size = buffer_size
         self.context = context
+        self.out_frames = out_frames
         self.shuffle = shuffle
         
         self.batch_index = 0
@@ -210,7 +219,7 @@ class DataLoader:
             mats2_senone = mats2_senone[:cutoff]
 
         mats2 = np.pad(mats2,
-                    ((self.context,),(0,)),
+                    ((self.context + self.out_frames,),(0,)),
                     'constant',
                     constant_values=0)
 
@@ -230,7 +239,7 @@ class DataLoader:
         end = min((self.batch_index+1) * self.batch_size, self.senone_buffer.shape[0])
 
         # Collect the data 
-        frame_batch = np.stack((self.frame_buffer[i:i+1+2*self.context,]
+        frame_batch = np.stack((self.frame_buffer[i:i+self.out_frames+2*self.context,]
             for i in self.indexes[start:end]), axis = 0)
         senone_batch = self.senone_buffer[self.indexes[start:end]]
 

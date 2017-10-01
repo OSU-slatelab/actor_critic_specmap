@@ -48,6 +48,7 @@ def do_eval(sess, critic_loss_single, critic):
         batch_size  = a.batch_size,
         buffer_size = a.buffer_size,
         context     = a.context,
+        out_frames  = 1,
         shuffle     = False)
 
     # Initialize loop vars
@@ -89,6 +90,7 @@ def do_train(sess, train_ops, critic, totframes_train):
             batch_size  = a.batch_size,
             buffer_size = a.buffer_size,
             context     = a.context,
+            out_frames  = 1,
             shuffle     = True)
 
     tot_loss_epoch = 0
