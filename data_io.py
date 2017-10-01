@@ -230,7 +230,7 @@ class DataLoader:
         end = min((self.batch_index+1) * self.batch_size, self.senone_buffer.shape[0])
 
         # Collect the data 
-        frame_batch = np.stack((self.frame_buffer[i:i+1+2*self.context,].flatten()
+        frame_batch = np.stack((self.frame_buffer[i:i+1+2*self.context,]
             for i in self.indexes[start:end]), axis = 0)
         senone_batch = self.senone_buffer[self.indexes[start:end]]
 

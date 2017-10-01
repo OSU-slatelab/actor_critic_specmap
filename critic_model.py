@@ -76,7 +76,6 @@ class Critic:
 
     def __init__(self,
             inputs,
-            input_size,
             layer_size  = 1024,
             layers      = 6,
             output_size = 1999,
@@ -102,7 +101,6 @@ class Critic:
         """
 
         self.inputs = inputs
-        self.input_size = input_size
         
         # Layer params
         self.dropout = dropout
@@ -120,8 +118,13 @@ class Critic:
     def _create_model(self):
         """ Put together all the parts of the critic model. """
 
+        # Flatten
+        input_shape = self.inputs.get_shape().as_list()
+        flat_len = input_shape[1] * input_shape[2]
+        inputs = tf.reshape(self.inputs, (-1, flat_len))
+
         with tf.variable_scope("hidden1"):
-          hidden = feedforward_layer(self.inputs, (self.input_size, self.layer_size))
+          hidden = feedforward_layer(inputs, (flat_len, self.layer_size))
 
         for i in range(2, self.layers + 1):
             with tf.variable_scope("hidden%d" % i):

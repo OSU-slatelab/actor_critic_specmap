@@ -136,14 +136,13 @@ def run_training():
         os.makedirs(a.exp_name)
 
     with tf.Graph().as_default():
-        shape = (None, a.input_featdim*(2*a.context+1))
+        shape = (None, 2*a.context + 1, a.input_featdim)
         frame_placeholder = tf.placeholder(tf.float32, shape=shape, name="frame_placeholder")
 
         # Define our critic model
         with tf.variable_scope('critic'):
             critic = Critic(
                 inputs      = frame_placeholder,
-                input_size  = a.input_featdim*(2*a.context+1),
                 layer_size  = a.cunits,
                 layers      = a.clayers,
                 output_size = a.senones,
