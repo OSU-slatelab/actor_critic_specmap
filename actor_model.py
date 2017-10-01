@@ -58,7 +58,7 @@ class Actor:
 		"""Put together all the parts of the actor model."""
 
 		# Initialize graph
-		a = self._frame_output(self.inputs[:, 0 : self.context_frames + 1], reuse = False)
+		a = self._cnn_frame_output(self.inputs[:, 0 : self.context_frames + 1], reuse = False)
 
 		# Generate all the output frames
 		output = [self._cnn_frame_output(self.inputs[:, i : i + self.context_frames + 1])
