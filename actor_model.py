@@ -18,7 +18,13 @@ class Actor:
     trained on clean speech.
     """
 
-    def __init__(self, input_shape, layer_size = 1024, output_frames = 11, dropout = 0.1, filters = 64):
+    def __init__(self,
+            input_shape,
+            layer_size = 2048,
+            layers = 2,
+            output_frames = 11,
+            dropout = 0.1,
+            filters = 64):
         """
         Create actor model.
 
@@ -46,6 +52,7 @@ class Actor:
         # Layer params
         self.dropout = dropout
         self.layer_size = layer_size
+        self.layers = layers
         self.filters = filters
         
         # Whether or not we're training
@@ -71,17 +78,12 @@ class Actor:
     def _dnn_frame_output(self, inputs, reuse = True):
         """Generate the graph for a single frame of output"""
 
-        inputs = tf.reshape(inputs,
+        layer = tf.reshape(inputs,
                 shape = (self.input_shape[0], (self.context_frames + 1) * self.input_shape[2]))
 
-        with tf.variable_scope('actor_layer1', reuse = reuse):
-            layer1 = self._dense(inputs)
-
-        with tf.variable_scope('actor_layer2', reuse = reuse):
-            layer2 = self._dense(layer1)
-
-        with tf.variable_scope('actor_layer3', reuse = reuse):
-            layer3 = self._dense(layer2)
+        for i in range(self.layers):
+            with tf.variable_scope('actor_layer' + str(i), reuse = reuse):
+                layer = self._dense(layer)
 
         with tf.variable_scope('output_layer', reuse = reuse):
             output = tf.layers.dense(output, self.output_shape[2])
@@ -110,19 +112,14 @@ class Actor:
     def _cnn_frame_output(self, inputs, reuse = True):
         """Generate the graph for a single frame of output"""
 
-        inputs = tf.expand_dims(inputs, 3)
+        layer = tf.expand_dims(inputs, 3)
 
-        with tf.variable_scope('actor_layer1', reuse = reuse):
-            layer1 = self._conv(inputs)
-
-        with tf.variable_scope('actor_layer2', reuse = reuse):
-            layer2 = self._conv(layer1)
-
-        with tf.variable_scope('actor_layer3', reuse = reuse):
-            layer3 = self._conv(layer2)
+        for i in range(self.layers):
+            with tf.variable_scope('actor_layer' + str(i), reuse = reuse):
+                layer = self._conv(layer)
 
         with tf.variable_scope('output_layer', reuse = reuse):
-            output = tf.reshape(layer3,
+            output = tf.reshape(layer,
                     shape=(self.input_shape[0], (self.context_frames + 1) * self.input_shape[2] * self.filters))
             output = tf.layers.dense(output, self.output_shape[2])
 
