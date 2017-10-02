@@ -6,12 +6,11 @@ import tensorflow as tf
 import numpy as np
 import argparse
 import os
-import sys
-import time
 
 from critic_model import Critic
 from actor_model import Actor
 from data_io import DataLoader
+from trainer import Trainer
 
 parser = argparse.ArgumentParser()
 
@@ -42,97 +41,6 @@ parser.add_argument("--context", type=int, default=5)
 parser.add_argument("--buffer_size", default=10, type=int)
 parser.add_argument("--batch_size", default=1024, type=int)
 a = parser.parse_args()
-
-def do_eval(sess, loss_single, critic, actor):
-    """ Compute loss over validation set """
-
-    # Create loader
-    loader = DataLoader(
-        base_dir    = a.base_directory,
-        frame_file  = a.frame_dev_file,
-        senone_file = a.senone_dev_file,
-        batch_size  = a.batch_size,
-        buffer_size = a.buffer_size,
-        context     = a.context,
-        out_frames  = 1 + 2 * a.context,
-        shuffle     = False)
-
-    # Initialize loop vars
-    tot_loss_epoch = 0
-    totframes = 0
-    start_time = time.time()
-
-    # Stop when we've reached a batch smaller than the batch size
-    for frame_batch, senone_batch in loader.batchify():
-
-        feed_dict = {
-            actor.inputs: frame_batch,
-            critic.labels: senone_batch,
-            actor.training: False,
-            critic.training: False,
-        }
-
-        result = sess.run(loss_single, feed_dict=feed_dict)
-
-        tot_loss_epoch += frame_batch.shape[0] * result
-        totframes += frame_batch.shape[0]
-    
-    # Compute loss
-    eval_loss = float(tot_loss_epoch)/totframes 
-    duration = time.time() - start_time
-
-    return eval_loss, duration
-
-def do_train(sess, train_ops, critic, actor):
-    """ Perform one epoch of training """
-
-    # Create loader for data
-    loader = DataLoader(
-            base_dir    = a.base_directory,
-            frame_file  = a.frame_train_file,
-            senone_file = a.senone_train_file,
-            batch_size  = a.batch_size,
-            buffer_size = a.buffer_size,
-            context     = a.context,
-            out_frames  = 1 + 2 * a.context,
-            shuffle     = True)
-
-    print("Total train frames:", loader.frame_count)
-
-    tot_loss_epoch = 0
-    frames = 0
-    start_time = time.time()
-
-    # Iterate dataset
-    for frame_batch, senone_batch in loader.batchify():
-
-        frames += frame_batch.shape[0]
-        update_progressbar(frames / loader.frame_count)
-
-        feed_dict = {
-            actor.inputs: frame_batch,
-            critic.labels: senone_batch,
-            actor.training: True,
-            critic.training: False,
-        }
-
-        critic_loss, _ = sess.run(train_ops, feed_dict=feed_dict)
-        tot_loss_epoch += frame_batch.shape[0]*critic_loss
-
-    # Compute loss
-    avg_loss_epoch = float(tot_loss_epoch) / frames
-    
-    duration = time.time() - start_time
-
-    return avg_loss_epoch, duration
-
-def update_progressbar(progress):
-    """ Make a very basic progress bar """
-
-    length = 30
-    intprog = int(round(progress * length))
-    sys.stdout.write("\r[{0}] {1:2.1f}%".format("#"*intprog + "-"*(length-intprog), progress*100))
-    sys.stdout.flush()
 
 def run_training():
     """ Define our model and train it """
@@ -165,35 +73,60 @@ def run_training():
                 layers      = a.clayers,
                 output_size = a.senones,
                 dropout     = a.dropout)
+            
+        # Create loader for train data
+        train_loader = DataLoader(
+            base_dir    = a.base_directory,
+            frame_file  = a.frame_train_file,
+            senone_file = a.senone_train_file,
+            batch_size  = a.batch_size,
+            buffer_size = a.buffer_size,
+            context     = a.context,
+            out_frames  = 1 + 2 * a.context,
+            shuffle     = True)
 
-        # Define ops
-        actor_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='actor')
-        train_ops = critic.create_train_ops(a.max_global_norm, a.lr, actor_vars)
-        
-        # Re-define actor vars so it includes train ops
+        print("Total train frames:", train_loader.frame_count)
+
+        # Create loader
+        dev_loader = DataLoader(
+            base_dir    = a.base_directory,
+            frame_file  = a.frame_dev_file,
+            senone_file = a.senone_dev_file,
+            batch_size  = a.batch_size,
+            buffer_size = a.buffer_size,
+            context     = a.context,
+            out_frames  = 1 + 2 * a.context,
+            shuffle     = False)
+
+        print("Total dev frames:", dev_loader.frame_count)
+
+        with tf.variable_scope('trainer'):
+            trainer = Trainer(a.lr, a.max_global_norm, critic, actor)
+
+        # Saver is also loader
         actor_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='actor')
         critic_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='critic')
-        
-        # Saver is also loader
+        trainer_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='trainer')
         actor_saver = tf.train.Saver(actor_vars)
         critic_saver = tf.train.Saver(critic_vars)
 
         # Begin session
         sess = tf.Session()
 
-        # Load critic weights, initialize actor weights
+        # Load critic weights, initialize actor weights and trainer weights
         critic_saver.restore(sess, tf.train.latest_checkpoint(a.exp_name))
         sess.run(tf.variables_initializer(actor_vars))
+        sess.run(tf.variables_initializer(trainer_vars))
         
         # Perform training
         for epoch in range(1, 200):
             print('Epoch %d' % epoch)
 
-            train_loss, duration = do_train(sess, train_ops, critic, actor)
+            train_loss, duration = trainer.run_ops(sess, train_loader, training = True)
             print ('\nTrain loss: %.6f (%.3f sec)' % (train_loss, duration))
 
-            eval_loss, duration = do_eval(sess, train_ops[0], critic, actor)
-            print('Eval loss: %.6f (%.3f sec)' % (eval_loss, duration))
+            eval_loss, duration = trainer.test_all_data(sess, dev_loader, training = False)
+            print('\nEval loss: %.6f (%.3f sec)' % (eval_loss, duration))
 
             save_file = os.path.join(a.actor_checkpoints, "model.ckpt")
             save_path = actor_saver.save(sess, save_file, global_step=epoch)

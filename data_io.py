@@ -154,7 +154,7 @@ class DataLoader:
         self._count_frames_from_senone_file()
 
         self.empty = False
-        self.fill_buffer()
+        self._fill_buffer()
 
     def _count_frames_from_senone_file(self):
 
@@ -192,7 +192,7 @@ class DataLoader:
 
         return senone_dict, uid
 
-    def fill_buffer(self):
+    def _fill_buffer(self):
         """ Read data from files into buffers """
 
         # Read data
@@ -263,6 +263,13 @@ class DataLoader:
             batch_index += 1
             if batch_index * self.batch_size >= self.senone_buffer.shape[0]:
                 batch_index = 0
-                self.fill_buffer()
+                self._fill_buffer()
 
             yield frame_batch, senone_batch
+
+    def reset(self):
+        self.uid = 0
+        self.offset = 0
+        self.empty = False
+
+        self._fill_buffer()

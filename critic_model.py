@@ -140,21 +140,3 @@ class Critic:
         with tf.variable_scope('output'):
             self.outputs = feedforward_layer(hidden, (self.layer_size, self.output_size))
 
-
-    def create_train_ops(self, max_global_norm, learning_rate, var_list=None):
-        """ Define the loss and training ops """
-
-        loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=self.outputs, labels=self.labels)
-        loss_single = tf.reduce_mean(loss)
-
-        if var_list is None:
-            var_list = tf.trainable_variables()
-
-        grads = tf.gradients(loss_single, var_list)
-        grads, _ = tf.clip_by_global_norm(grads, clip_norm=max_global_norm)
-        grad_var_pairs = zip(grads, var_list)
-        optim = tf.train.RMSPropOptimizer(learning_rate)
-        train = optim.apply_gradients(grad_var_pairs)
-
-        return loss_single, train
-        
