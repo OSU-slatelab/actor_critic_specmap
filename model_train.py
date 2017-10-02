@@ -54,12 +54,10 @@ def do_eval(sess, critic_loss_single, critic):
     # Initialize loop vars
     tot_loss_epoch = 0
     totframes = 0
-    batch_size = a.batch_size
     start_time = time.time()
 
     # Stop when we've reached a batch smaller than the batch size
-    while batch_size == a.batch_size:
-        frame_batch, senone_batch = loader.make_inputs()
+    for frame_batch, senone_batch in loader.batchify():
 
         feed_dict = {
             critic.inputs: frame_batch,
@@ -69,9 +67,8 @@ def do_eval(sess, critic_loss_single, critic):
 
         result = sess.run(critic_loss_single, feed_dict=feed_dict)
 
-        batch_size = feed_dict[critic.inputs].shape[0]
-        tot_loss_epoch += batch_size * result
-        totframes += batch_size
+        tot_loss_epoch += frame_batch.shape[0] * result
+        totframes += frame_batch.shape[0]
     
     # Compute loss
     eval_loss = float(tot_loss_epoch)/totframes 
@@ -79,7 +76,7 @@ def do_eval(sess, critic_loss_single, critic):
 
     return eval_loss, duration
 
-def do_train(sess, train_ops, critic, totframes_train):
+def do_train(sess, train_ops, critic):
     """ Perform one epoch of training """
 
     # Create loader for data
@@ -93,17 +90,17 @@ def do_train(sess, train_ops, critic, totframes_train):
             out_frames  = 1,
             shuffle     = True)
 
+    print("Total train frames:", loader.frame_count)
+
     tot_loss_epoch = 0
-    avg_loss_epoch = 0
+    frames = 0
     start_time = time.time()
 
     # Iterate dataset
-    totbatches_train = int(totframes_train/a.batch_size) + 1
-    for step in range(totbatches_train):
+    for frame_batch, senone_batch in loader.batchify():
 
-        update_progressbar(step / totbatches_train)
-
-        frame_batch, senone_batch = loader.make_inputs()
+        frames += frame_batch.shape[0]
+        update_progressbar(frames / loader.frame_count)
 
         feed_dict = {
             critic.inputs: frame_batch,
@@ -112,11 +109,10 @@ def do_train(sess, train_ops, critic, totframes_train):
         }
 
         critic_loss, _ = sess.run(train_ops, feed_dict=feed_dict)
-        tot_loss_epoch += feed_dict[critic.inputs].shape[0]*critic_loss
+        tot_loss_epoch += frame_batch.shape[0]*critic_loss
 
     # Compute loss
-    avg_loss_epoch = float(tot_loss_epoch) / totframes_train
-    tot_loss_epoch = 0
+    avg_loss_epoch = float(tot_loss_epoch) / frames
     
     duration = time.time() - start_time
 
@@ -164,13 +160,10 @@ def run_training():
         #    saver.restore(sess,a.checkpoint)
 
         # Perform training
-        totframes_train = 5436393
-        print("Total number of frames:" + str(totframes_train))
-
         for epoch in range(1, 200):
             print('Epoch %d' % epoch)
 
-            train_loss, duration = do_train(sess, train_ops, critic, totframes_train)
+            train_loss, duration = do_train(sess, train_ops, critic)
             print ('\nTrain loss: %.6f (%.3f sec)' % (train_loss, duration))
 
             eval_loss, duration = do_eval(sess, train_ops[0], critic)

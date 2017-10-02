@@ -148,11 +148,20 @@ class DataLoader:
         self.out_frames = out_frames
         self.shuffle = shuffle
         
-        self.batch_index = 0
         self.uid = 0
         self.offset = 0
 
+        self._count_frames_from_senone_file()
+
+        self.empty = False
         self.fill_buffer()
+
+    def _count_frames_from_senone_file(self):
+
+        self.frame_count = 0
+
+        for line in open(os.path.join(self.data_dir, self.senone_file)):
+            self.frame_count += (len(line.split()) - 1) // 4
 
 
     def read_mats(self):
@@ -189,6 +198,11 @@ class DataLoader:
         # Read data
         ark_dict, uid_new    = self.read_mats()
         senone_dict, uid_new = self.read_senones()
+
+        if len(ark_dict) == 0:
+            self.empty = True
+            return
+
         self.uid = uid_new
 
         ids = sorted(ark_dict.keys())
@@ -232,22 +246,23 @@ class DataLoader:
         self.frame_buffer = mats2
         self.senone_buffer = mats2_senone
 
-    def make_inputs(self):
+    def batchify(self):
         """ Make a batch of frames and senones """
 
-        start = self.batch_index * self.batch_size
-        end = min((self.batch_index+1) * self.batch_size, self.senone_buffer.shape[0])
+        batch_index = 0
+        while not self.empty:
+            start = batch_index * self.batch_size
+            end = min((batch_index+1) * self.batch_size, self.senone_buffer.shape[0])
 
-        # Collect the data 
-        frame_batch = np.stack((self.frame_buffer[i:i+self.out_frames+2*self.context,]
-            for i in self.indexes[start:end]), axis = 0)
-        senone_batch = self.senone_buffer[self.indexes[start:end]]
+            # Collect the data 
+            frame_batch = np.stack((self.frame_buffer[i:i+self.out_frames+2*self.context,]
+                for i in self.indexes[start:end]), axis = 0)
+            senone_batch = self.senone_buffer[self.indexes[start:end]]
 
-        # Increment batch, and if necessary re-fill buffer
-        self.batch_index += 1
-        if self.batch_index * self.batch_size >= self.senone_buffer.shape[0]:
-            self.batch_index = 0
-            self.fill_buffer()
+            # Increment batch, and if necessary re-fill buffer
+            batch_index += 1
+            if batch_index * self.batch_size >= self.senone_buffer.shape[0]:
+                batch_index = 0
+                self.fill_buffer()
 
-        return frame_batch, senone_batch
-     
+            yield frame_batch, senone_batch
