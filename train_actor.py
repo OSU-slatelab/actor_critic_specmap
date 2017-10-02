@@ -125,7 +125,7 @@ def run_training():
             train_loss, duration = trainer.run_ops(sess, train_loader, training = True)
             print ('\nTrain loss: %.6f (%.3f sec)' % (train_loss, duration))
 
-            eval_loss, duration = trainer.test_all_data(sess, dev_loader, training = False)
+            eval_loss, duration = trainer.run_ops(sess, dev_loader, training = False)
             print('\nEval loss: %.6f (%.3f sec)' % (eval_loss, duration))
 
             save_file = os.path.join(a.actor_checkpoints, "model.ckpt")
