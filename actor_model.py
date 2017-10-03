@@ -20,6 +20,7 @@ class Actor:
 
     def __init__(self,
             input_shape,
+            output_shape,
             layer_size = 2048,
             layers = 2,
             output_frames = 11,
@@ -30,7 +31,9 @@ class Actor:
 
         Params:
          * input_shape : tuple
-            The shape of the input, 3D tensor [batch size x frame count x frame size]
+            The shape of the input, 3D tensor [batch size x frame count x input frame size]
+         * output_shape : tuple
+            The shape of the output, 3D tensor [batch size x frame count x output frame size]
          * layer_size : int
             Number of neurons per layer
          * output_frames : int
@@ -42,7 +45,7 @@ class Actor:
         self.input_shape = input_shape
 
         # Batch size x frame count x frame size
-        self.output_shape = (input_shape[0], output_frames, input_shape[2])
+        self.output_shape = output_shape
         self.output_frames = output_frames
         self.targets = tf.placeholder(dtype = tf.float32, shape = self.output_shape, name = "targets")
 

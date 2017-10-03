@@ -1,7 +1,9 @@
 data-fbank
-new-exp
+data-spectrogram
+new_exp
 *.txt
 __pycache__
 *.sh
+*.scp
 *.pyc
 *.swp

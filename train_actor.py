@@ -16,10 +16,10 @@ parser = argparse.ArgumentParser()
 
 # Files
 parser.add_argument("--base_directory", default=os.getcwd(), help="The directory the data is in")
-parser.add_argument("--frame_train_file", default="data-fbank/train_si84_noisy/feats.scp", help="The input feature file for training")
-parser.add_argument("--frame_dev_file", default="data-fbank/dev_dt_05_noisy/feats.scp", help="The input feature file for cross-validation")
+parser.add_argument("--frame_train_file", default="data-spectrogram/train_si84_noisy/feats.scp", help="The input feature file for training")
+parser.add_argument("--frame_dev_file", default="data-spectrogram/dev_dt_05_noisy/feats.scp.mod", help="The input feature file for cross-validation")
 parser.add_argument("--senone_train_file", default="clean_labels_train.txt", help="The senone file for clean training labels")
-parser.add_argument("--senone_dev_file", default="clean_labels_dev.txt", help="The senone file for clean cross-validation labels")
+parser.add_argument("--senone_dev_file", default="clean_labels_dev_mod.txt", help="The senone file for clean cross-validation labels")
 parser.add_argument("--exp_name", default="new_exp", help="directory with critic weights")
 parser.add_argument("--actor_checkpoints", default="actor_checkpoints", help="directory with actor weights")
 
@@ -35,7 +35,8 @@ parser.add_argument("--cunits", type=int, default=1024)
 parser.add_argument("--dropout", type=float, default=0.5, help="percentage of neurons to drop")
 
 # Data
-parser.add_argument("--input_featdim", type=int, default=40)
+parser.add_argument("--input_featdim", type=int, default=257)
+parser.add_argument("--output_featdim", type=int, default=40)
 parser.add_argument("--senones", type=int, default=1999)
 parser.add_argument("--context", type=int, default=5)
 parser.add_argument("--buffer_size", default=10, type=int)
@@ -57,8 +58,10 @@ def run_training():
             # Output of actor is input of critic, so output context plus frame
             output_frames = 2*a.context + 1
             shape = (None, output_frames + 2*a.context, a.input_featdim)
+            output_shape = (None, output_frames + 2*a.context, a.output_featdim)
             actor = Actor(
                 input_shape   = shape,
+                output_shape  = output_shape,
                 layer_size    = a.aunits,
                 layers        = a.alayers,
                 output_frames = output_frames,
