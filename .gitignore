@@ -1,8 +1,12 @@
 data-fbank
 data-spectrogram
+*.pbs
 new_exp
 *.txt
+*.nfs*
 __pycache__
+actor_checkpoints
+critic_4layers
 *.sh
 *.scp
 *.pyc

@@ -16,8 +16,8 @@ parser = argparse.ArgumentParser()
 
 # Files
 parser.add_argument("--base_directory", default=os.getcwd(), help="The directory the data is in")
-parser.add_argument("--frame_train_file", default="data-spectrogram/train_si84_noisy/feats.scp", help="The input feature file for training")
-parser.add_argument("--frame_dev_file", default="data-spectrogram/dev_dt_05_noisy/feats.scp.mod", help="The input feature file for cross-validation")
+parser.add_argument("--frame_train_file", default="data-spectrogram/train_si84_delta_noisy/feats.scp", help="The input feature file for training")
+parser.add_argument("--frame_dev_file", default="data-spectrogram/dev_dt_05_delta_noisy/feats.scp.mod", help="The input feature file for cross-validation")
 parser.add_argument("--senone_train_file", default="clean_labels_train.txt", help="The senone file for clean training labels")
 parser.add_argument("--senone_dev_file", default="clean_labels_dev_mod.txt", help="The senone file for clean cross-validation labels")
 parser.add_argument("--exp_name", default="new_exp", help="directory with critic weights")
