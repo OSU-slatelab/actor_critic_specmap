@@ -77,7 +77,8 @@ class Critic:
     def __init__(self,
             inputs,
             layer_size  = 1024,
-            layers      = 6,
+            layers      = 7,
+            block_size  = 0,
             output_size = 1999,
             dropout     = 0.5):
         """
@@ -86,14 +87,12 @@ class Critic:
         Params:
          * inputs : Tensor
             The input placeholder or tensor from actor
-         * input_size : tuple
-            Dimensions of the input
-         * labels : Tensor
-            The placeholder storing labels
          * layer_size : int
             The size of the DNN layers
          * layers : int
             Number of layers
+         * block_size : int
+            Number of layers in residual block, 0 for no residual connection
          * output_size : int
             Number of classes to output
          * dropout : float
@@ -106,6 +105,7 @@ class Critic:
         self.dropout = dropout
         self.layer_size = layer_size
         self.layers = layers
+        self.block_size = block_size
         self.output_size = output_size
         
         # Placeholders
@@ -123,19 +123,23 @@ class Critic:
         flat_len = input_shape[1] * input_shape[2]
         inputs = tf.reshape(self.inputs, (-1, flat_len))
 
-        with tf.variable_scope("hidden1"):
-          hidden = feedforward_layer(inputs, (flat_len, self.layer_size))
+        with tf.variable_scope("hidden0"):
+            hidden = feedforward_layer(inputs, (flat_len, self.layer_size))
+            hidden = lrelu(hidden, 0.3)
+        
+        # Store residual for connection
+        residual = hidden
 
-        for i in range(2, self.layers + 1):
+        for i in range(1, self.layers):
             with tf.variable_scope("hidden%d" % i):
                 hidden = feedforward_layer(hidden, (self.layer_size, self.layer_size))
-
-                # Batch norm, but not on first layer
-                if i != 1:
-                  hidden = batch_norm(hidden, (self.layer_size, self.layer_size), self.training)
-
-                # Activate!
                 hidden = lrelu(hidden, 0.3)
+                hidden = batch_norm(hidden, (self.layer_size, self.layer_size), self.training)
+
+            # Add residual connection
+            if self.block_size != 0 and i % self.block_size == 0:
+                hidden = hidden + residual
+                residual = hidden
 
         with tf.variable_scope('output'):
             self.outputs = feedforward_layer(hidden, (self.layer_size, self.output_size))

@@ -26,8 +26,9 @@ parser.add_argument("--lr", type=float, default = 0.0002, help = "initial learni
 #Model
 parser.add_argument("--alayers", type=int, default=2)
 parser.add_argument("--aunits", type=int, default=2048)
-parser.add_argument("--clayers", type=int, default=6)
+parser.add_argument("--clayers", type=int, default=7)
 parser.add_argument("--cunits", type=int, default=1024)
+parser.add_argument("--cblock_size", type=int, default=0)
 
 parser.add_argument("--input_featdim", type=int, default=40)
 parser.add_argument("--senones", type=int, default=1999)
@@ -54,6 +55,7 @@ def run_training():
                 inputs      = frame_placeholder,
                 layer_size  = a.cunits,
                 layers      = a.clayers,
+                block_size  = a.cblock_size,
                 output_size = a.senones,
                 dropout     = a.dropout)
 
