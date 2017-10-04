@@ -99,6 +99,7 @@ def run_training():
         #    saver.restore(sess,a.checkpoint)
 
         # Perform training
+        min_loss = float('inf')
         for epoch in range(1, 200):
             print('Epoch %d' % epoch)
 
@@ -108,7 +109,10 @@ def run_training():
             eval_loss, duration = trainer.run_ops(sess, dev_loader, training = False)
             print('\nEval loss: %.6f (%.3f sec)' % (eval_loss, duration))
 
-            save_path = saver.save(sess, os.path.join(a.exp_name, "model.ckpt"), global_step=epoch)
+            if eval_loss < min_loss:
+                min_loss = eval_loss
+                save_file = os.path.join(a.exp_name, f"model-{eval_loss}.ckpt")
+                save_path = saver.save(sess, save_file, global_step=epoch)
 
 def main():
     run_training()

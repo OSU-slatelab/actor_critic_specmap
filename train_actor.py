@@ -122,6 +122,7 @@ def run_training():
         sess.run(tf.variables_initializer(trainer_vars))
         
         # Perform training
+        min_loss = float('inf')
         for epoch in range(1, 200):
             print('Epoch %d' % epoch)
 
@@ -131,8 +132,11 @@ def run_training():
             eval_loss, duration = trainer.run_ops(sess, dev_loader, training = False)
             print('\nEval loss: %.6f (%.3f sec)' % (eval_loss, duration))
 
-            save_file = os.path.join(a.actor_checkpoints, "model.ckpt")
-            save_path = actor_saver.save(sess, save_file, global_step=epoch)
+            # Save if we've got the best loss so far
+            if eval_loss < min_loss:
+                min_loss = eval_loss
+                save_file = os.path.join(a.actor_checkpoints, f"model-{eval_loss}.ckpt")
+                save_path = actor_saver.save(sess, save_file, global_step=epoch)
 
 def main():
     run_training()
