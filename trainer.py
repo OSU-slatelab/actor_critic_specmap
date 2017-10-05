@@ -54,7 +54,7 @@ class Trainer:
     def _create_ops(self):
         """ Define the loss and training ops """
 
-        loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=self.outputs, labels=self.labels)
+        loss = tf.nn.softmax_cross_entropy_with_logits(logits=self.outputs, labels=self.labels)
         self.loss = tf.reduce_mean(loss)
 
         grads = tf.gradients(self.loss, self.var_list)
