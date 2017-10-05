@@ -12,29 +12,34 @@ from data_io import DataLoader
 from trainer import Trainer
 
 parser = argparse.ArgumentParser()
+
+# Files
 parser.add_argument("--base_directory", default=os.getcwd(), help="The directory the data is in")
 parser.add_argument("--frame_train_file", default="data-fbank/train_si84_clean/feats.scp", help="The input feature file for training")
 parser.add_argument("--frame_dev_file", default="data-fbank/dev_dt_05_clean/feats.scp", help="The input feature file for cross-validation")
 parser.add_argument("--senone_train_file", default="clean_labels_train.txt", help="The senone file for clean training labels")
 parser.add_argument("--senone_dev_file", default="clean_labels_dev.txt", help="The senone file for clean cross-validation labels")
+parser.add_argument("--exp_name", default="new_exp", help="directory with checkpoint to resume training from or use for testing")
 
+# Training
+parser.add_argument("--lr", type=float, default = 0.0002, help = "initial learning rate")
+parser.add_argument("--max_global_norm", type=float, default=5.0, help="global max norm for clipping")
+parser.add_argument("--dropout", type=float, default=0.5, help="percentage of neurons to drop")
 parser.add_argument("--buffer_size", default=10, type=int)
 parser.add_argument("--batch_size", default=1024, type=int)
-parser.add_argument("--exp_name", default="new_exp", help="directory with checkpoint to resume training from or use for testing")
-#Training
-parser.add_argument("--lr", type=float, default = 0.0002, help = "initial learning rate")
-#Model
+parser.add_argument("--l2_weight", default=0, type=float)
+
+# Model
 parser.add_argument("--alayers", type=int, default=2)
 parser.add_argument("--aunits", type=int, default=2048)
 parser.add_argument("--clayers", type=int, default=7)
 parser.add_argument("--cunits", type=int, default=1024)
 parser.add_argument("--cblock_size", type=int, default=0)
 
+# Input
 parser.add_argument("--input_featdim", type=int, default=40)
 parser.add_argument("--senones", type=int, default=1999)
 parser.add_argument("--context", type=int, default=5)
-parser.add_argument("--max_global_norm", type=float, default=5.0, help="global max norm for clipping")
-parser.add_argument("--dropout", type=float, default=0.5, help="percentage of neurons to drop")
 a = parser.parse_args()
 
 
@@ -87,7 +92,7 @@ def run_training():
 
         # Class for training
         with tf.variable_scope('trainer'):
-            trainer = Trainer(a.lr, a.max_global_norm, critic)
+            trainer = Trainer(a.lr, a.max_global_norm, a.l2_weight, critic)
 
         # Save all variables
         saver = tf.train.Saver()

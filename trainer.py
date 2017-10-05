@@ -20,13 +20,15 @@ def update_progressbar(progress):
 class Trainer:
     """ Train a model """
 
-    def __init__(self, learning_rate, max_global_norm, critic, actor = None):
+    def __init__(self, learning_rate, max_global_norm, l2_weight, critic, actor = None):
         """ 
         Params:
          * learning_rate : float
             Rate of gradient descent
          * max_global_norm : float
             For clipping norm
+         * l2_weight : float
+            Amount of l2 loss to include
          * critic : Critic
             model to train
          * actor : Actor
@@ -48,14 +50,17 @@ class Trainer:
         self.labels = critic.labels
         self.learning_rate = learning_rate
         self.max_global_norm = max_global_norm
+        self.l2_weight = l2_weight
 
         self._create_ops()
 
     def _create_ops(self):
         """ Define the loss and training ops """
 
+        l2_loss = self.l2_weight * tf.reduce_sum([tf.nn.l2_loss(var) for var in self.var_list])
+
         loss = tf.nn.softmax_cross_entropy_with_logits(logits=self.outputs, labels=self.labels)
-        self.loss = tf.reduce_mean(loss)
+        self.loss = tf.reduce_mean(loss) + l2_loss
 
         grads = tf.gradients(self.loss, self.var_list)
         grads, _ = tf.clip_by_global_norm(grads, clip_norm=self.max_global_norm)
