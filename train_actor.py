@@ -36,7 +36,7 @@ parser.add_argument("--cunits", type=int, default=1024)
 parser.add_argument("--dropout", type=float, default=0.5, help="percentage of neurons to drop")
 
 # Data
-parser.add_argument("--input_featdim", type=int, default=257)
+parser.add_argument("--input_featdim", type=int, default=771)
 parser.add_argument("--output_featdim", type=int, default=40)
 parser.add_argument("--senones", type=int, default=1999)
 parser.add_argument("--context", type=int, default=5)
