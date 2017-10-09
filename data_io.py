@@ -105,6 +105,8 @@ def read_kaldi_ark_from_scp(uid, offset, batch_size, buffer_size, scp_fn, ark_ba
             m,rows = struct.unpack("<bi", ark_read_buffer.read(5))
             n,cols = struct.unpack("<bi", ark_read_buffer.read(5))
             tmp_mat = np.frombuffer(ark_read_buffer.read(rows*cols*4), dtype=np.float32)
+            if len(tmp_mat) != rows * cols:
+                return {}, lines
             utt_mat = np.reshape(tmp_mat, (rows, cols))
             #utt_mat_list=utt_mat.tolist()
             ark_read_buffer.close()
