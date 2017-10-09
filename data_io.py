@@ -153,8 +153,7 @@ class DataLoader:
 
         self._count_frames_from_senone_file()
 
-        self.empty = False
-        self._fill_buffer()
+        self.empty = True
 
     def _count_frames_from_senone_file(self):
 
@@ -212,24 +211,21 @@ class DataLoader:
 
         if not hasattr(self, 'offset_senones'):
             self.offset_senones = np.empty((0, senone_dict[ids[0]].shape[1]), np.float32)
-
         # Create frame buffer
         mats = [ark_dict[i] for i in ids]
         mats2 = np.vstack(mats)
         mats2 = np.concatenate((self.offset_frames, mats2),axis=0)
-
         # Create senone buffer
         mats_senone = [senone_dict[i] for i in ids]
         mats2_senone = np.vstack(mats_senone)
         mats2_senone = np.concatenate((self.offset_senones, mats2_senone), axis=0)
-
         # Put one batch into the offset frames
         cutoff = self.batch_size * self.buffer_size
         if mats2.shape[0] >= cutoff:
-            offset_frames = mats2[cutoff:]
+            self.offset_frames = mats2[cutoff:]
             mats2 = mats2[:cutoff]
-            self.offset = offset_frames.shape[0]
-            offset_senones = mats2_senone[cutoff:]
+            self.offset = self.offset_frames.shape[0]
+            self.offset_senones = mats2_senone[cutoff:]
             mats2_senone = mats2_senone[:cutoff]
 
         mats2 = np.pad(mats2,
@@ -250,6 +246,10 @@ class DataLoader:
         """ Make a batch of frames and senones """
 
         batch_index = 0
+        if self.empty:
+            self._fill_buffer()
+            self.empty = False
+ 
         while not self.empty:
             start = batch_index * self.batch_size
             end = min((batch_index+1) * self.batch_size, self.senone_buffer.shape[0])
@@ -264,7 +264,7 @@ class DataLoader:
             if batch_index * self.batch_size >= self.senone_buffer.shape[0]:
                 batch_index = 0
                 self._fill_buffer()
-
+            
             yield frame_batch, senone_batch
 
     def reset(self):

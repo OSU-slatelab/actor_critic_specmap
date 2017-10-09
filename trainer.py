@@ -74,13 +74,14 @@ class Trainer:
         frames = 0
         start_time = time.time()
         self.feed_dict[self.training] = training
-
         # Iterate dataset
         for frame_batch, senone_batch in loader.batchify():
 
             self.feed_dict[self.inputs] = frame_batch
             self.feed_dict[self.labels] = senone_batch
-
+            #print("after batchify")
+            #print(frame_batch.shape)
+            #print(senone_batch.shape)
             if training:
                 batch_loss, _ = sess.run([self.loss, self.train], feed_dict = self.feed_dict)
             else:

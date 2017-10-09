@@ -51,7 +51,6 @@ class Actor:
 
         # Every frame past the size of the output is a context frame
         self.context_frames = self.input_shape[1] - output_frames
-
         # Layer params
         self.dropout = dropout
         self.layer_size = layer_size
@@ -76,7 +75,6 @@ class Actor:
 
         # Stack the output frames into a single tensor
         self.outputs = tf.stack(output, axis = 1)
-
 
     def _dnn_frame_output(self, inputs, reuse = True):
         """Generate the graph for a single frame of output"""

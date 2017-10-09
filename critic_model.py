@@ -122,7 +122,6 @@ class Critic:
         input_shape = self.inputs.get_shape().as_list()
         flat_len = input_shape[1] * input_shape[2]
         inputs = tf.reshape(self.inputs, (-1, flat_len))
-
         with tf.variable_scope("hidden0"):
             hidden = feedforward_layer(inputs, (flat_len, self.layer_size))
             hidden = lrelu(hidden, 0.3)

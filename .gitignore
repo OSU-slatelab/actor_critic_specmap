@@ -6,7 +6,9 @@ new_exp
 *.nfs*
 __pycache__
 actor_checkpoints
-critic_4layers
+debug_labels.py
+critic_*
+actor_*
 *.sh
 *.scp
 *.pyc
