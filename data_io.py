@@ -244,7 +244,7 @@ class DataLoader:
         self.frame_buffer = mats2
         self.senone_buffer = mats2_senone
 
-    def batchify(self):
+    def batchify(self, pretrain):
         """ Make a batch of frames and senones """
 
         batch_index = 0
@@ -259,15 +259,19 @@ class DataLoader:
             # Collect the data 
             frame_batch = np.stack((self.frame_buffer[i:i+self.out_frames+2*self.context,]
                 for i in self.indexes[start:end]), axis = 0)
-            senone_batch = self.senone_buffer[self.indexes[start:end]]
+
+            if pretrain:
+                label_batch = frame_batch[:,self.context:-self.context,0:40]
+            else:
+                label_batch = self.senone_buffer[self.indexes[start:end]]
 
             # Increment batch, and if necessary re-fill buffer
             batch_index += 1
             if batch_index * self.batch_size >= self.senone_buffer.shape[0]:
                 batch_index = 0
                 self._fill_buffer()
-            
-            yield frame_batch, senone_batch
+
+            yield frame_batch, label_batch
 
     def reset(self):
         self.uid = 0

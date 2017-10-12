@@ -89,6 +89,8 @@ class Actor:
         with tf.variable_scope('output_layer', reuse = reuse):
             output = tf.layers.dense(layer, self.output_shape[2])
 
+        #output += inputs[:, self.context_frames // 2, 0:self.output_shape[2]]
+
         return output
 
     def _dense(self, inputs):
@@ -121,8 +123,10 @@ class Actor:
 
         with tf.variable_scope('output_layer', reuse = reuse):
             output = tf.reshape(layer,
-                    shape=(self.input_shape[0], (self.context_frames + 1) * self.input_shape[2] * self.filters))
+                    shape=(-1, (self.context_frames + 1) * self.input_shape[2] * self.filters))
             output = tf.layers.dense(output, self.output_shape[2])
+
+        #output += inputs[:, self.context_frames // 2, 0:self.output_shape[2]]
 
         return output
 
