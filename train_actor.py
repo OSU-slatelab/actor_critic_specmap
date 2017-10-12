@@ -18,6 +18,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--base_directory", default=os.getcwd(), help="The directory the data is in")
 parser.add_argument("--frame_train_file", default="data-spectrogram/train_si84_noisy/feats.scp", help="The input feature file for training")
 parser.add_argument("--frame_dev_file", default="data-spectrogram/dev_dt_05_delta_noisy/feats.scp.mod", help="The input feature file for cross-validation")
+parser.add_argument("--clean_train_file", default=None, help="Clean speech for mse loss")
+parser.add_argument("--clean_dev_file", default=None, help="Clean speech for mse loss")
 parser.add_argument("--senone_train_file", default="clean_labels_train.txt", help="The senone file for clean training labels")
 parser.add_argument("--senone_dev_file", default="clean_labels_dev_mod.txt", help="The senone file for clean cross-validation labels")
 parser.add_argument("--exp_name", default="new_exp", help="directory with critic weights")
@@ -28,6 +30,7 @@ parser.add_argument("--actor_pretrain", default=None, help="directory with actor
 parser.add_argument("--lr", type=float, default=0.0002, help="initial learning rate")
 parser.add_argument("--max_global_norm", type=float, default=5.0, help="global max norm for clipping")
 parser.add_argument("--l2_weight", type=float, default=0)
+parser.add_argument("--mse_weight", type=float, default=0)
 
 # Model
 parser.add_argument("--alayers", type=int, default=2)
@@ -88,7 +91,8 @@ def run_training():
             buffer_size = a.buffer_size,
             context     = a.context,
             out_frames  = 1 + 2 * a.context,
-            shuffle     = False)
+            shuffle     = False,
+            clean_file  = a.clean_train_file)
 
         #print("Total train frames:", train_loader.frame_count)
         # Create loader
@@ -100,12 +104,13 @@ def run_training():
             buffer_size = a.buffer_size,
             context     = a.context,
             out_frames  = 1 + 2 * a.context,
-            shuffle     = False)
+            shuffle     = False,
+            clean_file  = a.clean_dev_file)
 
         #print("Total dev frames:", dev_loader.frame_count)
 
         with tf.variable_scope('trainer'):
-            trainer = Trainer(a.lr, a.max_global_norm, a.l2_weight, critic, actor)
+            trainer = Trainer(a.lr, a.max_global_norm, a.l2_weight, a.mse_weight, critic, actor)
 
         # Saver is also loader
         actor_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='actor')

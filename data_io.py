@@ -139,7 +139,8 @@ class DataLoader:
             buffer_size,
             context,
             out_frames,
-            shuffle):
+            shuffle,
+            clean_file=None):
         """ Initialize the data loader including filling the buffer """
         self.data_dir = base_dir
         self.frame_file = frame_file
@@ -149,6 +150,7 @@ class DataLoader:
         self.context = context
         self.out_frames = out_frames
         self.shuffle = shuffle
+        self.clean_file = clean_file
         
         self.uid = 0
         self.offset = 0
@@ -165,11 +167,11 @@ class DataLoader:
             self.frame_count += (len(line.split()) - 1) // 4
 
 
-    def read_mats(self):
+    def read_mats(self, frame_file):
         """ Read features from file into a buffer """
         #Read a buffer containing buffer_size*batch_size+offset 
         #Returns a line number of the scp file
-        scp_fn = os.path.join(self.data_dir, self.frame_file)
+        scp_fn = os.path.join(self.data_dir, frame_file)
         ark_dict, uid = read_kaldi_ark_from_scp(
                 self.uid,
                 self.offset,
@@ -197,8 +199,11 @@ class DataLoader:
         """ Read data from files into buffers """
 
         # Read data
-        ark_dict, uid_new    = self.read_mats()
+        ark_dict, uid_new    = self.read_mats(self.frame_file)
         senone_dict, uid_new = self.read_senones()
+        
+        if self.clean_file is not None:
+            clean_dict, uid_new  = self.read_mats(self.clean_file)
 
         if len(ark_dict) == 0:
             self.empty = True
@@ -213,38 +218,62 @@ class DataLoader:
 
         if not hasattr(self, 'offset_senones'):
             self.offset_senones = np.empty((0, senone_dict[ids[0]].shape[1]), np.float32)
+
+        if not hasattr(self, 'offset_clean') and self.clean_file is not None:
+            self.offset_clean = np.empty((0, clean_dict[ids[0]].shape[1]), np.float32)
+
         # Create frame buffer
-        mats = [ark_dict[i] for i in ids]
-        mats2 = np.vstack(mats)
-        mats2 = np.concatenate((self.offset_frames, mats2),axis=0)
+        frames = [ark_dict[i] for i in ids]
+        frames = np.vstack(frames)
+        frames = np.concatenate((self.offset_frames, frames), axis=0)
+
+        if self.clean_file is not None:
+            clean = [clean_dict[i] for i in ids]
+            clean = np.vstack(clean)
+            clean = np.concatenate((self.offset_clean, clean), axis=0)
+
         # Create senone buffer
-        mats_senone = [senone_dict[i] for i in ids]
-        mats2_senone = np.vstack(mats_senone)
-        mats2_senone = np.concatenate((self.offset_senones, mats2_senone), axis=0)
+        senone = [senone_dict[i] for i in ids]
+        senone = np.vstack(senone)
+        senone = np.concatenate((self.offset_senones, senone), axis=0)
+
         # Put one batch into the offset frames
         cutoff = self.batch_size * self.buffer_size
-        if mats2.shape[0] >= cutoff:
-            self.offset_frames = mats2[cutoff:]
-            mats2 = mats2[:cutoff]
-            self.offset = self.offset_frames.shape[0]
-            self.offset_senones = mats2_senone[cutoff:]
-            mats2_senone = mats2_senone[:cutoff]
+        if frames.shape[0] >= cutoff:
+            self.offset_frames = frames[cutoff:]
+            frames = frames[:cutoff]
+            self.offset_senones = senone[cutoff:]
+            senone = senone[:cutoff]
 
-        mats2 = np.pad(
-            array     = mats2,
+            if self.clean_file is not None:
+                self.offset_clean = clean[cutoff:]
+                clean = clean[:cutoff]
+
+            self.offset = self.offset_frames.shape[0]
+
+        frames = np.pad(
+            array     = frames,
             pad_width = ((self.context + self.out_frames // 2,),(0,)),
             mode      = 'edge')
 
+        self.frame_buffer = frames
+        self.senone_buffer = senone
+
+        if self.clean_file is not None:
+            clean = np.pad(
+                array     = clean,
+                pad_width = ((self.context,),(0,)),
+                mode      = 'edge')
+            self.clean_buffer = clean
+
         # Generate a random permutation of indexes
         if self.shuffle:
-            self.indexes = np.random.permutation(mats2_senone.shape[0])
+            self.indexes = np.random.permutation(senone.shape[0])
         else:
-            self.indexes = np.arange(mats2_senone.shape[0])
+            self.indexes = np.arange(senone.shape[0])
 
-        self.frame_buffer = mats2
-        self.senone_buffer = mats2_senone
 
-    def batchify(self, pretrain):
+    def batchify(self, pretrain=False):
         """ Make a batch of frames and senones """
 
         batch_index = 0
@@ -252,18 +281,23 @@ class DataLoader:
             self._fill_buffer()
             self.empty = False
  
+        batch = {}
         while not self.empty:
             start = batch_index * self.batch_size
             end = min((batch_index+1) * self.batch_size, self.senone_buffer.shape[0])
 
             # Collect the data 
-            frame_batch = np.stack((self.frame_buffer[i:i+self.out_frames+2*self.context,]
+            batch['frame'] = np.stack((self.frame_buffer[i:i+self.out_frames+2*self.context,]
                 for i in self.indexes[start:end]), axis = 0)
 
+            if self.clean_file is not None:
+                batch['clean'] = np.stack((self.clean_buffer[i:i+self.out_frames]
+                    for i in self.indexes[start:end]), axis = 0)
+
             if pretrain:
-                label_batch = frame_batch[:,self.context:-self.context,0:40]
+                batch['label'] = batch['frame'][:,self.context:-self.context,0:40]
             else:
-                label_batch = self.senone_buffer[self.indexes[start:end]]
+                batch['label'] = self.senone_buffer[self.indexes[start:end]]
 
             # Increment batch, and if necessary re-fill buffer
             batch_index += 1
@@ -271,7 +305,7 @@ class DataLoader:
                 batch_index = 0
                 self._fill_buffer()
 
-            yield frame_batch, label_batch
+            yield batch
 
     def reset(self):
         self.uid = 0
