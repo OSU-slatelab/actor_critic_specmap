@@ -7,57 +7,92 @@ Date: Fall 2017
 
 import tensorflow as tf
 import numpy as np
+import random
 
-class DeltaFeatures:
-    def __init__(order=2, window=2):
-        assert order >=0 && order < 1000, "invalid order specified"
-        assert window >=0 && window < 1000, "invalid window specified"
-        scales = np.zeros(order+1)
-        scales[0] = 1.0
-        for (i = 1; i <= order; i++) 
-            prev_scales = scales[i-1]
-            cur_scales = scales[i]
-            _window = window; 
-            assert _window!=0, "invalid window size" 
-            prev_offset = (prev_scales.Dim()-1)/2
-            cur_offset = prev_offset + _window;
-            cur_scales.Resize(prev_scales.Dim() + 2*window);  
+#assert order >=0 && order <=2 , "invalid order specified"
+#assert window >=0 && window < 1000, "invalid window specified"
+order=2
+window=2        
+scales = []
+scdel1 = np.ones((1))
+scales.append(scdel1)
+for i in range(1,order+1): 
+    prev_scales = scales[i-1]
+    _window = window; 
+    assert _window!=0, "invalid window size" 
+    prev_offset = int((prev_scales.shape[0]-1)/2)
+    cur_offset = prev_offset + _window;
+    scdel = np.zeros(shape=(prev_scales.shape[0] + 2*window,), dtype=np.float)
+    scales.append(scdel)
+    cur_scales = scales[i]
+   
+    normalizer = 0.0;
+    for j in range(-window,window+1):
+        normalizer += j*j;
+        for k in range(-prev_offset,prev_offset+1):
+            cur_scales[j+k+cur_offset] += j * prev_scales[k+prev_offset]
+    scaler = float(1/normalizer)
+    cur_scales = scaler * cur_scales
+    scales[i] = cur_scales
 
-        normalizer = 0.0;
-        for (j = -window; j <= window; j++)
-            normalizer += j*j;
-        for (k = -prev_offset; k <= prev_offset; k++)
-            cur_scales(j+k+cur_offset) +=
-            static_cast<BaseFloat>(j) * prev_scales(k+prev_offset);
-        cur_scales.Scale(1.0 / normalizer);
-    
-    def process(input_feats,frame):
-   KALDI_ASSERT(frame < input_feats.NumRows());
-  int32 num_frames = input_feats.NumRows(),
-      feat_dim = input_feats.NumCols();
-  KALDI_ASSERT(static_cast<int32>(output_frame->Dim()) == feat_dim * (opts_.order+1));
-  output_frame->SetZero();
-  for (int32 i = 0; i <= opts_.order; i++) {
-    const Vector<BaseFloat> &scales = scales_[i];
-    int32 max_offset = (scales.Dim() - 1) / 2;
-    SubVector<BaseFloat> output(*output_frame, i*feat_dim, feat_dim);
-    for (int32 j = -max_offset; j <= max_offset; j++) {
-      // if asked to read
-      int32 offset_frame = frame + j;
+def Process(input_feats,frame):
+    num_frames = input_feats.shape[0]
+    feat_dim = input_feats.shape[1]
+    output_frame = []
 
- void ComputeDeltas(const DeltaFeaturesOptions &delta_opts,
-                   const MatrixBase<BaseFloat> &input_features,
-                   Matrix<BaseFloat> *output_features) {
-  output_features->Resize(input_features.NumRows(),
-                          input_features.NumCols()
-                          *(delta_opts.order + 1));
-  DeltaFeatures delta(delta_opts);
-  for (int32 r = 0; r < static_cast<int32>(input_features.NumRows()); r++) {
-    SubVector<BaseFloat> row(*output_features, r);
-    delta.Process(input_features, r, &row);
-  }
-}
-
+    for i in range(0,order+1):
+        scale = scales[i]
+        max_offset = int((scale.shape[0] - 1) / 2)
+        output = np.zeros(feat_dim) 
+        for j in range(-max_offset, max_offset+1):
+            offset_frame = frame + j
+            if (offset_frame < 0):
+                offset_frame = 0
+            elif (offset_frame >= num_frames):
+                offset_frame = num_frames - 1
+            sscale = scale[j + max_offset]
+            if (sscale != 0):
+                output = output + (sscale * input_feats[offset_frame][:])
+        output_frame.append(output)
+    result = np.stack(output_frame).flatten()
+    print(result.shape)
 
 
+scp_fn="data-fbank/train_si84_delta_noisy/feats.scp"
+            
+ark_dict = {}
+totframes = 0
+lines = 0
+with open(scp_fn) as f:
+    for line in f:
+        lines = lines + 1
+        if lines<=uid:
+            continue
+        if line == "":
+            continue
+        utt_id, path_pos = line.replace("\n", "").split()
+        ark_path, pos = path_pos.split(":")
+        ark_path = os.path.join(ark_base_dir, ark_path)
+        ark_read_buffer = smart_open(ark_path, "rb")
+        ark_read_buffer.seek(int(pos),0)
+        header = struct.unpack("<xcccc", ark_read_buffer.read(5))
+        #assert header[0] == "B", "Input .ark file is not binary"
+        rows = 0
+        cols = 0
+        m,rows = struct.unpack("<bi", ark_read_buffer.read(5))
+        n,cols = struct.unpack("<bi", ark_read_buffer.read(5))
+        tmp_mat = np.frombuffer(ark_read_buffer.read(rows*cols*4), dtype=np.float32)
+        utt_mat = np.reshape(tmp_mat, (rows, cols))
+        #utt_mat_list=utt_mat.tolist()
+        ark_read_buffer.close()
+        ark_dict[utt_id] = utt_mat
+        totframes += rows
+        if totframes>=(batch_size*buffer_size-offset):
+            break
+
+return ark_dict,lines
+
+
+A = np.random.rand(1000,40)
+Process(A,0)
 

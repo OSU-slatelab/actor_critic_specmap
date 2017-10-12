@@ -15,8 +15,8 @@ parser = argparse.ArgumentParser()
 
 # Files
 parser.add_argument("--base_directory", default=os.getcwd(), help="The directory the data is in")
-parser.add_argument("--frame_train_file", default="data-fbank/train_si84_clean/feats.scp", help="The input feature file for training")
-parser.add_argument("--frame_dev_file", default="data-fbank/dev_dt_05_clean/feats.scp", help="The input feature file for cross-validation")
+parser.add_argument("--frame_train_file", default="data-fbank/train_si84_clean_global_normalized/feats.scp", help="The input feature file for training")
+parser.add_argument("--frame_dev_file", default="data-fbank/dev_dt_05_clean_global_normalized/feats.scp", help="The input feature file for cross-validation")
 parser.add_argument("--senone_train_file", default="clean_labels_train.txt", help="The senone file for clean training labels")
 parser.add_argument("--senone_dev_file", default="clean_labels_dev.txt", help="The senone file for clean cross-validation labels")
 parser.add_argument("--exp_name", default="new_exp", help="directory with checkpoint to resume training from or use for testing")
