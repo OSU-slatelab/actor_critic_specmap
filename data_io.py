@@ -230,10 +230,10 @@ class DataLoader:
             self.offset_senones = mats2_senone[cutoff:]
             mats2_senone = mats2_senone[:cutoff]
 
-        mats2 = np.pad(mats2,
-                    ((self.context + self.out_frames,),(0,)),
-                    'constant',
-                    constant_values=0)
+        mats2 = np.pad(
+            array     = mats2,
+            pad_width = ((self.context + self.out_frames // 2,),(0,)),
+            mode      = 'edge')
 
         # Generate a random permutation of indexes
         if self.shuffle:
