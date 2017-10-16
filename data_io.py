@@ -295,7 +295,7 @@ class DataLoader:
                     for i in self.indexes[start:end]), axis = 0)
 
             if pretrain:
-                batch['label'] = batch['frame'][:,self.context:-self.context,0:40]
+                batch['label'] = batch['clean']
             else:
                 batch['label'] = self.senone_buffer[self.indexes[start:end]]
 
