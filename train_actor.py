@@ -30,7 +30,7 @@ parser.add_argument("--actor_pretrain", default=None, help="directory with actor
 parser.add_argument("--lr", type=float, default=0.0002, help="initial learning rate")
 parser.add_argument("--max_global_norm", type=float, default=5.0, help="global max norm for clipping")
 parser.add_argument("--l2_weight", type=float, default=0)
-parser.add_argument("--mse_weight", type=float, default=0)
+parser.add_argument("--mse_decay", type=float, default=0)
 
 # Model
 parser.add_argument("--alayers", type=int, default=2)
@@ -110,7 +110,7 @@ def run_training():
         #print("Total dev frames:", dev_loader.frame_count)
 
         with tf.variable_scope('trainer'):
-            trainer = Trainer(a.lr, a.max_global_norm, a.l2_weight, a.mse_weight, critic, actor)
+            trainer = Trainer(a.lr, a.max_global_norm, a.l2_weight, a.mse_decay, critic, actor)
 
         # Saver is also loader
         actor_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='actor')

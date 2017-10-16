@@ -24,7 +24,7 @@ class Trainer:
             learning_rate,
             max_global_norm,
             l2_weight = 0.,
-            mse_weight = 0.,
+            mse_decay = 0.,
             critic = None,
             actor = None):
         """ 
@@ -66,14 +66,16 @@ class Trainer:
             self.outputs = critic.outputs
             self.labels = critic.labels
 
-        if mse_weight > 0:
+        if mse_decay > 0:
             self.actor_out = actor.outputs
             self.clean = tf.placeholder(tf.float32, shape=actor.outputs.shape)
+            self.mse_weight = tf.placeholder(tf.float32)
+            self.current_mse_weight = 1.0
 
         self.learning_rate = learning_rate
         self.max_global_norm = max_global_norm
         self.l2_weight = l2_weight
-        self.mse_weight = mse_weight
+        self.mse_decay = mse_decay
 
         self._create_ops(pretrain)
 
@@ -89,16 +91,16 @@ class Trainer:
             loss = tf.nn.softmax_cross_entropy_with_logits(logits=self.outputs, labels=self.labels)
             loss = tf.reduce_mean(loss)
 
-            if self.mse_weight > 0:
+            if self.mse_decay > 0:
                 loss2 = tf.losses.mean_squared_error(labels=self.clean, predictions=self.actor_out)
-                loss += self.mse_weight * tf.reduce_mean(loss2)
+                loss = (1-self.mse_weight) * loss + self.mse_weight * tf.reduce_mean(loss2)
 
         self.loss = loss + l2_loss
         
         grads = tf.gradients(self.loss, self.var_list)
         grads, _ = tf.clip_by_global_norm(grads, clip_norm=self.max_global_norm)
         grad_var_pairs = zip(grads, self.var_list)
-        optim = tf.train.RMSPropOptimizer(self.learning_rate)
+        optim = tf.train.GradientDescentOptimizer(self.learning_rate)
         self.train = optim.apply_gradients(grad_var_pairs)
 
     def run_ops(self, sess, loader, training = True, pretrain = False):
@@ -114,8 +116,9 @@ class Trainer:
             self.feed_dict[self.inputs] = batch['frame']
             self.feed_dict[self.labels] = batch['label']
 
-            if self.mse_weight > 0:
+            if self.mse_decay > 0:
                 self.feed_dict[self.clean] = batch['clean']
+                self.feed_dict[self.mse_weight] = self.current_mse_weight
             
             if training:
                 batch_loss, _ = sess.run([self.loss, self.train], feed_dict = self.feed_dict)
@@ -131,6 +134,8 @@ class Trainer:
         duration = time.time() - start_time
 
         loader.reset()
+        if self.mse_decay > 0:
+            self.current_mse_weight *= self.mse_decay
 
         return avg_loss_epoch, duration
 
