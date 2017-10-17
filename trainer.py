@@ -20,7 +20,13 @@ def update_progressbar(progress):
 class Trainer:
     """ Train a model """
 
-    def __init__(self, learning_rate, max_global_norm, l2_weight, critic = None, actor = None):
+    def __init__(self,
+            learning_rate,
+            max_global_norm,
+            l2_weight = 0.,
+            mse_decay = 0.,
+            critic = None,
+            actor = None):
         """ 
         Params:
          * learning_rate : float
@@ -60,9 +66,16 @@ class Trainer:
             self.outputs = critic.outputs
             self.labels = critic.labels
 
+        if mse_decay > 0:
+            self.actor_out = actor.outputs
+            self.clean = tf.placeholder(tf.float32, shape=actor.outputs.shape)
+            self.mse_weight = tf.placeholder(tf.float32)
+            self.current_mse_weight = 1.0
+
         self.learning_rate = learning_rate
         self.max_global_norm = max_global_norm
         self.l2_weight = l2_weight
+        self.mse_decay = mse_decay
 
         self._create_ops(pretrain)
 
@@ -78,12 +91,16 @@ class Trainer:
             loss = tf.nn.softmax_cross_entropy_with_logits(logits=self.outputs, labels=self.labels)
             loss = tf.reduce_mean(loss)
 
+            if self.mse_decay > 0:
+                loss2 = tf.losses.mean_squared_error(labels=self.clean, predictions=self.actor_out)
+                loss = (1-self.mse_weight) * loss + self.mse_weight * tf.reduce_mean(loss2)
+
         self.loss = loss + l2_loss
         
         grads = tf.gradients(self.loss, self.var_list)
         grads, _ = tf.clip_by_global_norm(grads, clip_norm=self.max_global_norm)
         grad_var_pairs = zip(grads, self.var_list)
-        optim = tf.train.RMSPropOptimizer(self.learning_rate)
+        optim = tf.train.GradientDescentOptimizer(self.learning_rate)
         self.train = optim.apply_gradients(grad_var_pairs)
 
     def run_ops(self, sess, clean_loader, noisy_loader, training = True, pretrain = False):
@@ -92,34 +109,33 @@ class Trainer:
         frames = 0
         start_time = time.time()
         self.feed_dict[self.training] = training
-        
-        print(clean_loader.batchify(pretrain))
-        #noisy_batch, senone_batch = noisy_loader.batchify(pretrain)
 
-        print(a.shape)
-        print(b.shape)
         # Iterate dataset
-        for frame_batch, senone_batch in izip(loader.batchify(pretrain),clean_loader.batchify(pretrain)):
+        for batch in loader.batchify(pretrain):
 
-            self.feed_dict[self.inputs] = frame_batch
-            self.feed_dict[self.labels] = senone_batch
-            #print("after batchify")
-            #print(frame_batch.shape)
-            #print(senone_batch.shape)
+            self.feed_dict[self.inputs] = batch['frame']
+            self.feed_dict[self.labels] = batch['label']
+
+            if self.mse_decay > 0:
+                self.feed_dict[self.clean] = batch['clean']
+                self.feed_dict[self.mse_weight] = self.current_mse_weight
+            
             if training:
                 batch_loss, _ = sess.run([self.loss, self.train], feed_dict = self.feed_dict)
             else:
                 batch_loss = sess.run(self.loss, feed_dict = self.feed_dict)
 
-            frames += frame_batch.shape[0]
+            frames += batch['frame'].shape[0]
             update_progressbar(frames / loader.frame_count)
-            tot_loss_epoch += frame_batch.shape[0] * batch_loss
+            tot_loss_epoch += batch['frame'].shape[0] * batch_loss
 
         # Compute loss
         avg_loss_epoch = float(tot_loss_epoch) / frames
         duration = time.time() - start_time
 
         loader.reset()
+        if self.mse_decay > 0:
+            self.current_mse_weight *= self.mse_decay
 
         return avg_loss_epoch, duration
 

@@ -115,7 +115,7 @@ def run_training():
 
         # Class for training
         with tf.variable_scope('trainer'):
-            trainer = Trainer(a.lr, a.max_global_norm, a.l2_weight, critic)
+            trainer = Trainer(a.lr, a.max_global_norm, a.l2_weight, critic=critic)
 
         # Save all variables
         saver = tf.train.Saver()
