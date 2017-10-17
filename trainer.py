@@ -26,7 +26,8 @@ class Trainer:
             l2_weight = 0.,
             mse_decay = 0.,
             critic = None,
-            actor = None):
+            actor = None,
+            output_critic = None):
         """ 
         Params:
          * learning_rate : float
@@ -39,103 +40,138 @@ class Trainer:
             model to train. If None, pretrain actor
          * actor : Actor
             (optional) model to train. If passed, critic is frozen.
+         * output_critic : Critic
+            critic for generating posteriors as labels
         """
         
         self.feed_dict = {}
 
         # Critic is none if we're pretraining actor
-        pretrain = critic is None
+        self.pretrain = critic is None
+        
+        # Set this to a placeholder if clean speech is input
+        self.clean = None
 
         # Actor is none if we're training critic
         if actor is None:
             self.inputs = critic.inputs
             self.var_list = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='critic')
             self.training = critic.training
+            self.labels = critic.labels
+
+            loss = tf.nn.softmax_cross_entropy_with_logits(logits=critic.outputs, labels=critic.labels)
+            self.loss = tf.reduce_mean(loss)
+
+        # Training actor
         else:
             self.inputs = actor.inputs
             self.var_list = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='actor')
             self.training = actor.training
-
-            if not pretrain:
+            
+            if self.pretrain:
+                self.labels = tf.placeholder(tf.float32, shape=actor.outputs.shape)
+                loss = tf.losses.mean_squared_error(labels=self.labels, predictions=actor.outputs)
+                self.loss = tf.reduce_mean(loss)
+            else:
                 self.feed_dict[critic.training] = False
+                self.feed_dict[output_critic.training] = False
+                
+                # We're going to try to match the posteriors of clean speech
+                self.labels = critic.labels
+                self.clean = output_critic.inputs
 
-        if pretrain:
-            self.outputs = actor.outputs
-            self.labels = tf.placeholder(tf.float32, shape=actor.outputs.shape)
-        else:
-            self.outputs = critic.outputs
-            self.labels = critic.labels
+                labels = tf.nn.softmax(output_critic.outputs)
+                predictions = tf.nn.softmax(critic.outputs)
 
-        if mse_decay > 0:
-            self.actor_out = actor.outputs
-            self.clean = tf.placeholder(tf.float32, shape=actor.outputs.shape)
-            self.mse_weight = tf.placeholder(tf.float32)
-            self.current_mse_weight = 1.0
+                loss = tf.losses.mean_squared_error(labels=labels, predictions=predictions)
+                self.critic_loss = tf.reduce_mean(loss)
+
+                # This checks whether or not we're including mse loss
+                if mse_decay > 0:
+                    self.mse_weight = tf.placeholder(tf.float32)
+                    self.current_mse_weight = 1.0
+
+                    loss = tf.losses.mean_squared_error(labels=self.clean, predictions=actor.outputs)
+                    self.mse_loss = tf.reduce_mean(loss)
+
+                    self.loss = (1-self.mse_weight) * self.critic_loss + self.mse_weight * self.mse_loss
+                else:
+                    self.loss = self.critic_loss
+
+        l2_reg = l2_weight * tf.reduce_sum([tf.nn.l2_loss(var) for var in self.var_list])
+        self.loss += l2_reg
 
         self.learning_rate = learning_rate
         self.max_global_norm = max_global_norm
-        self.l2_weight = l2_weight
         self.mse_decay = mse_decay
 
-        self._create_ops(pretrain)
+        self._create_train_op()
 
-    def _create_ops(self, pretrain = False):
-        """ Define the loss and training ops """
-
-        l2_loss = self.l2_weight * tf.reduce_sum([tf.nn.l2_loss(var) for var in self.var_list])
-
-        if pretrain:
-            loss = tf.losses.mean_squared_error(labels=self.labels, predictions=self.outputs)
-            loss = tf.reduce_mean(loss)
-        else:
-            loss = tf.nn.softmax_cross_entropy_with_logits(logits=self.outputs, labels=self.labels)
-            loss = tf.reduce_mean(loss)
-
-            if self.mse_decay > 0:
-                loss2 = tf.losses.mean_squared_error(labels=self.clean, predictions=self.actor_out)
-                loss = (1-self.mse_weight) * loss + self.mse_weight * tf.reduce_mean(loss2)
-
-        self.loss = loss + l2_loss
+    def _create_train_op(self):
+        """ Define the training op """
         
         grads = tf.gradients(self.loss, self.var_list)
         grads, _ = tf.clip_by_global_norm(grads, clip_norm=self.max_global_norm)
         grad_var_pairs = zip(grads, self.var_list)
-        optim = tf.train.GradientDescentOptimizer(self.learning_rate)
+        optim = tf.train.AdamOptimizer(self.learning_rate)
         self.train = optim.apply_gradients(grad_var_pairs)
 
-    def run_ops(self, sess, clean_loader, noisy_loader, training = True, pretrain = False):
+    def run_ops(self, sess, loader, training = True):
 
-        tot_loss_epoch = 0
+        tot_loss = 0
+        tot_mse_loss = 0
+        tot_critic_loss = 0
         frames = 0
         start_time = time.time()
         self.feed_dict[self.training] = training
 
         # Iterate dataset
-        for batch in loader.batchify(pretrain):
+        for batch in loader.batchify(self.pretrain):
 
             self.feed_dict[self.inputs] = batch['frame']
             self.feed_dict[self.labels] = batch['label']
 
-            if self.mse_decay > 0:
+            # Count the frames in the batch
+            batch_frames = batch['frame'].shape[0]
+
+            if self.clean is not None:
                 self.feed_dict[self.clean] = batch['clean']
+
+            # If we're combining mse and critic loss, report both independently
+            if self.mse_decay > 0:
                 self.feed_dict[self.mse_weight] = self.current_mse_weight
+
+                ops = [self.mse_loss, self.critic_loss, self.loss]
+
+                if training:
+                    mse_loss, critic_loss, batch_loss, _ = sess.run(ops + [self.train], self.feed_dict)
+                else:
+                    mse_loss, critic_loss, batch_loss = sess.run(ops, self.feed_dict)
+
+                tot_mse_loss += batch_frames * mse_loss
+                tot_critic_loss += batch_frames * critic_loss
             
-            if training:
+            # Just critic loss
+            elif training:
                 batch_loss, _ = sess.run([self.loss, self.train], feed_dict = self.feed_dict)
             else:
                 batch_loss = sess.run(self.loss, feed_dict = self.feed_dict)
 
-            frames += batch['frame'].shape[0]
+            tot_loss += batch_frames * batch_loss
+
+            # Update the progressbar
+            frames += batch_frames
             update_progressbar(frames / loader.frame_count)
-            tot_loss_epoch += batch['frame'].shape[0] * batch_loss
 
         # Compute loss
-        avg_loss_epoch = float(tot_loss_epoch) / frames
+        avg_loss = float(tot_loss) / frames
         duration = time.time() - start_time
 
         loader.reset()
         if self.mse_decay > 0:
-            self.current_mse_weight *= self.mse_decay
+            avg_mse_loss = tot_mse_loss / frames
+            avg_critic_loss = tot_critic_loss / frames
+            return avg_mse_loss, avg_critic_loss, avg_loss, duration
 
-        return avg_loss_epoch, duration
+        return avg_loss, duration
 
