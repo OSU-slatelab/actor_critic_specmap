@@ -86,14 +86,20 @@ class Trainer:
         optim = tf.train.RMSPropOptimizer(self.learning_rate)
         self.train = optim.apply_gradients(grad_var_pairs)
 
-    def run_ops(self, sess, loader, training = True, pretrain = False):
+    def run_ops(self, sess, clean_loader, noisy_loader, training = True, pretrain = False):
 
         tot_loss_epoch = 0
         frames = 0
         start_time = time.time()
         self.feed_dict[self.training] = training
+        
+        print(clean_loader.batchify(pretrain))
+        #noisy_batch, senone_batch = noisy_loader.batchify(pretrain)
+
+        print(a.shape)
+        print(b.shape)
         # Iterate dataset
-        for frame_batch, senone_batch in loader.batchify(pretrain):
+        for frame_batch, senone_batch in izip(loader.batchify(pretrain),clean_loader.batchify(pretrain)):
 
             self.feed_dict[self.inputs] = frame_batch
             self.feed_dict[self.labels] = senone_batch
