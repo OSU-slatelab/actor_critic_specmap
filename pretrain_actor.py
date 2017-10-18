@@ -90,7 +90,7 @@ def run_training():
             context     = a.context,
             out_frames  = 1 + 2 * a.context,
             shuffle     = False,
-            clean_file  = a.clean_train_file)
+            clean_file  = a.clean_dev_file)
 
         print("Total dev frames:", dev_loader.frame_count)
 

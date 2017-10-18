@@ -62,19 +62,29 @@ def run_training():
 
             # Output of actor is input of critic, so output context plus frame
             output_frames = 2*a.context + 1
-            shape = (None, output_frames + 2*a.context, a.input_featdim)
-            output_shape = (None, output_frames + 2*a.context, a.output_featdim)
+            actor_input_shape = (None, output_frames + 2*a.context, a.input_featdim)
+            actor_output_shape = (None, output_frames, a.output_featdim)
             actor = Actor(
-                input_shape   = shape,
-                output_shape  = output_shape,
+                input_shape   = actor_input_shape,
+                output_shape  = actor_output_shape,
                 layer_size    = a.aunits,
                 layers        = a.alayers,
                 output_frames = output_frames,
                 dropout       = a.dropout,
             )
 
-        # Define our critic model
+        # Define critic for generating outputs
         with tf.variable_scope('critic'):
+            clean_input = tf.placeholder(tf.float32, actor_output_shape)
+            output_critic = Critic(
+                inputs      = clean_input,
+                layer_size  = a.cunits,
+                layers      = a.clayers,
+                output_size = a.senones,
+                dropout     = a.dropout)
+
+        # Define our critic model
+        with tf.variable_scope('critic', reuse = True):
             critic = Critic(
                 inputs      = actor.outputs,
                 layer_size  = a.cunits,
@@ -110,7 +120,7 @@ def run_training():
         #print("Total dev frames:", dev_loader.frame_count)
 
         with tf.variable_scope('trainer'):
-            trainer = Trainer(a.lr, a.max_global_norm, a.l2_weight, a.mse_decay, critic, actor)
+            trainer = Trainer(a.lr, a.max_global_norm, a.l2_weight, a.mse_decay, critic, actor, output_critic)
 
         # Saver is also loader
         actor_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='actor')
@@ -135,11 +145,26 @@ def run_training():
         for epoch in range(1, 200):
             print('Epoch %d' % epoch)
 
-            train_loss, duration = trainer.run_ops(sess, train_loader, training = True)
-            print ('\nTrain loss: %.6f (%.3f sec)' % (train_loss, duration))
+            # Run train ops
+            feedback = trainer.run_ops(sess, train_loader, training = True)
+            if a.mse_decay > 0:
+                mse_loss, critic_loss, train_loss, duration = feedback
+                print('\nMSE loss: %.6f -- Critic loss: %.6f' % (mse_loss, critic_loss))
+            else:
+                train_loss, duration = feedback
+                print()
+            print('Train loss: %.6f (%.3f sec)' % (train_loss, duration))
 
-            eval_loss, duration = trainer.run_ops(sess, dev_loader, training = False)
-            print('\nEval loss: %.6f (%.3f sec)' % (eval_loss, duration))
+            # Run eval ops
+            feedback = trainer.run_ops(sess, dev_loader, training = False)
+            if a.mse_decay > 0:
+                trainer.current_mse_weight *= a.mse_decay
+                mse_loss, critic_loss, eval_loss, duration = feedback
+                print('\nMSE loss: %.6f -- Critic loss: %.6f' % (mse_loss, critic_loss))
+            else:
+                eval_loss, duration = feedback
+                print()
+            print('Eval loss: %.6f (%.3f sec)\n' % (eval_loss, duration))
 
             # Save if we've got the best loss so far
             if eval_loss < min_loss:
