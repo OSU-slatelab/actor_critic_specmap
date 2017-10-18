@@ -25,6 +25,7 @@ class Trainer:
             max_global_norm,
             l2_weight = 0.,
             mse_decay = 0.,
+            dann_critic = True,
             critic = None,
             actor = None):
         """ 
@@ -88,12 +89,18 @@ class Trainer:
             loss = tf.losses.mean_squared_error(labels=self.labels, predictions=self.outputs)
             loss = tf.reduce_mean(loss)
         else:
-            loss = tf.nn.softmax_cross_entropy_with_logits(logits=self.outputs, labels=self.labels)
-            loss = tf.reduce_mean(loss)
-
             if self.mse_decay > 0:
                 loss2 = tf.losses.mean_squared_error(labels=self.clean, predictions=self.actor_out)
                 loss = (1-self.mse_weight) * loss + self.mse_weight * tf.reduce_mean(loss2)
+            if self.dann_critic:
+                loss_domain = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.outputs[1], predictions=self.labels[1]))
+                loss_target = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=self.outputs[0], labels=self.labels[1]))
+                loss = loss_domain + loss_target
+            else:
+                 loss = tf.nn.softmax_cross_entropy_with_logits(logits=self.outputs, labels=self.labels)
+                 loss = tf.reduce_mean(loss)
+
+
 
         self.loss = loss + l2_loss
         
@@ -119,7 +126,10 @@ class Trainer:
             if self.mse_decay > 0:
                 self.feed_dict[self.clean] = batch['clean']
                 self.feed_dict[self.mse_weight] = self.current_mse_weight
+            if self.dann_critic:
+                self.feed_dict[self.clean] = batch['clean']
             
+             
             if training:
                 batch_loss, _ = sess.run([self.loss, self.train], feed_dict = self.feed_dict)
             else:

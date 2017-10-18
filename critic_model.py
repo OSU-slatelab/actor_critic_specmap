@@ -8,6 +8,7 @@ Date:   Fall 2017
 """
 
 import tensorflow as tf
+from flip_gradient import flip_gradient
 
 def lrelu(x, a):
     """ Leaky ReLU activation function """
@@ -80,7 +81,8 @@ class Critic:
             layers      = 7,
             block_size  = 0,
             output_size = 1999,
-            dropout     = 0.5):
+            dropout     = 0.5,
+            dann        = True):
         """
         Create critic model.
 
@@ -112,9 +114,68 @@ class Critic:
         self.training = tf.placeholder(dtype = tf.bool, name = "training")
         self.labels = tf.placeholder(dtype = tf.float32, shape = (None, output_size), name = "labels")
 
-        self._create_model()
+        if dann:
+            self._create_dann_model()
+        else:
+            self.create_model()
+
+    def _create_dann_model(self):
+        # Flatten
+        input_shape = self.inputs.get_shape().as_list()
+        flat_len = input_shape[1] * input_shape[2]
+        inputs = tf.reshape(self.inputs, (-1, flat_len))
+
+        with tf.variable_Scope("feature_extraction"):
+            with tf.variable_scope("hidden0"):
+                hidden = feedforward_layer(inputs, (flat_len, self.layer_size))
+                hidden = lrelu(hidden, 0.3)
+            with tf.variable_scope("hidden1"):
+                hidden = feedforward_layer(hidden, (self.layer_size, self.layer_size))
+                self.agnostic_feat = lrelu(hidden, 0.3)
+        
+        with tf.variable_scope("label_classifier"):
+            all_features = lambda: self.agnostic_feat
+            source_features = lambda: tf.slice(agnostic_feat, [0, 0], [self.batch_size / 2, -1])
+            classify_feats = tf.cond(self.train, source_features, all_features)
+
+            all_labels = lambda: self.labels
+            source_labels = lambda: tf.slice(self.labels, [0, 0], [batch_size / 2, -1])
+            classify_labels = tf.cond(self.train, source_labels, all_labels)
+            
+            hidden = classify_feats
+            for i in range(2, self.layers+2):
+                with tf.variable_scope("hidden%d" % i):
+                    hidden = feedforward_layer(hidden, (self.layer_size, self.layer_size))
+                    hidden = lrelu(hidden, 0.3)
+                    hidden = batch_norm(hidden, (self.layer_size, self.layer_size), self.training)
+        
+            with tf.variable_scope('label_output'):
+                label_outputs = feedforward_layer(hidden, (self.layer_size, self.output_size))
         
 
+        # Small MLP for domain prediction with adversarial loss
+        with tf.variable_scope('domain_classifier'):
+            
+            # Flip the gradient when backpropagating through this operation
+            feat = flip_gradient(self.agnostic_feat)
+            
+            hidden = feedforward_layer(feat, (self.layer_size, self.layer_size))
+            hidden = lrelu(hidden, 0.3)
+            hidden = batch_norm(hidden, (self.layer_size, self.layer_size), self.training)
+
+            hidden = feedforward_layer(feat, (self.layer_size, self.layer_size))
+            hidden = lrelu(hidden, 0.3)
+            hidden = batch_norm(hidden, (self.layer_size, self.layer_size), self.training)
+
+        with tf.variable_scope("domain_output"):
+            hidden = feedforward_layer(hidden, (self.layer_size, 1))
+            domain_outputs = tf.nn.sigmoid(hidden)
+       
+        self.outputs = []
+        self.outputs.append(label_outputs)
+        self.outputs.append(domain_outputs)     
+
+        
     def _create_model(self):
         """ Put together all the parts of the critic model. """
 
@@ -122,9 +183,10 @@ class Critic:
         input_shape = self.inputs.get_shape().as_list()
         flat_len = input_shape[1] * input_shape[2]
         inputs = tf.reshape(self.inputs, (-1, flat_len))
+
         with tf.variable_scope("hidden0"):
-            hidden = feedforward_layer(inputs, (flat_len, self.layer_size))
-            hidden = lrelu(hidden, 0.3)
+                hidden = feedforward_layer(inputs, (flat_len, self.layer_size))
+                hidden = lrelu(hidden, 0.3)
         
         # Store residual for connection
         residual = hidden

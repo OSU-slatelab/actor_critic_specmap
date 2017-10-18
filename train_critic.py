@@ -15,10 +15,8 @@ parser = argparse.ArgumentParser()
 
 # Files
 parser.add_argument("--base_directory", default=os.getcwd(), help="The directory the data is in")
-parser.add_argument("--frame_noisy_train_file", default="data-fbank/train_si84_noisy_global_normalized/feats.scp", help="The input noisy feature file for training")
-parser.add_argument("--frame_clean_train_file", default="data-fbank/train_si84_clean_global_normalized/feats.scp", help="The input clean feature file for training")
-parser.add_argument("--frame_noisy_dev_file", default="data-fbank/dev_dt_05_noisy_global_normalized/feats.scp", help="The input noisy feature file for cross-validation")
-parser.add_argument("--frame_clean_dev_file", default="data-fbank/dev_dt_05_clean_global_normalized/feats.scp", help="The input noisy feature file for cross-validation")
+parser.add_argument("--frame_train_file", default="data-fbank/train_si84_delta_clean_global_normalized/feats.scp", help="The input noisy feature file for training")
+parser.add_argument("--frame_dev_file", default="data-fbank/dev_dt_05_delta_clean_global_normalized/feats.scp", help="The input noisy feature file for cross-validation")
 parser.add_argument("--senone_train_file", default="clean_labels_train.txt", help="The senone file for clean training labels")
 parser.add_argument("--senone_dev_file", default="clean_labels_dev.txt", help="The senone file for clean cross-validation labels")
 parser.add_argument("--exp_name", default="new_exp", help="directory with checkpoint to resume training from or use for testing")
@@ -67,9 +65,9 @@ def run_training():
                 dropout     = a.dropout)
 
         # Create loader for train data
-        train_clean_loader = DataLoader(
+        train_loader = DataLoader(
             base_dir    = a.base_directory,
-            frame_file  = a.frame_clean_train_file,
+            frame_file  = a.frame_train_file,
             senone_file = a.senone_train_file,
             batch_size  = a.batch_size,
             buffer_size = a.buffer_size,
@@ -77,22 +75,12 @@ def run_training():
             out_frames  = 1,
             shuffle     = True)
 
-        train_noisy_loader = DataLoader(
-            base_dir    = a.base_directory,
-            frame_file  = a.frame_noisy_train_file,
-            senone_file = a.senone_train_file,
-            batch_size  = a.batch_size,
-            buffer_size = a.buffer_size,
-            context     = a.context,
-            out_frames  = 1,
-            shuffle     = True)
-
-        print("Frames in train data:", train_clean_loader.frame_count)
+        print("Frames in train data:", train_loader.frame_count)
 
         # Create loader for test data
-        dev_clean_loader = DataLoader(
+        dev_loader = DataLoader(
             base_dir    = a.base_directory,
-            frame_file  = a.frame_clean_dev_file,
+            frame_file  = a.frame_dev_file,
             senone_file = a.senone_dev_file,
             batch_size  = a.batch_size,
             buffer_size = a.buffer_size,
@@ -100,18 +88,7 @@ def run_training():
             out_frames  = 1,
             shuffle     = False)
 
-        dev_noisy_loader = DataLoader(
-            base_dir    = a.base_directory,
-            frame_file  = a.frame_noisy_dev_file,
-            senone_file = a.senone_dev_file,
-            batch_size  = a.batch_size,
-            buffer_size = a.buffer_size,
-            context     = a.context,
-            out_frames  = 1,
-            shuffle     = False)
-
-
-        print("Frames in dev data:", dev_clean_loader.frame_count)
+        print("Frames in dev data:", dev_loader.frame_count)
 
         # Class for training
         with tf.variable_scope('trainer'):
@@ -133,10 +110,10 @@ def run_training():
         for epoch in range(1, 200):
             print('Epoch %d' % epoch)
 
-            train_loss, duration = trainer.run_ops(sess, train_clean_loader, train_noisy_loader, training = True)
+            train_loss, duration = trainer.run_ops(sess, train_loader, training = True)
             print ('\nTrain loss: %.6f (%.3f sec)' % (train_loss, duration))
 
-            eval_loss, duration = trainer.run_ops(sess, dev_clean_loader, dev_noisy_loader, training = False)
+            eval_loss, duration = trainer.run_ops(sess, dev_loader, training = False)
             print('\nEval loss: %.6f (%.3f sec)' % (eval_loss, duration))
 
             if eval_loss < min_loss:
