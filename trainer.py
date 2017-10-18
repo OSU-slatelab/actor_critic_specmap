@@ -25,7 +25,6 @@ class Trainer:
             max_global_norm,
             l2_weight = 0.,
             mse_decay = 0.,
-            dann_critic = True,
             critic = None,
             actor = None,
             output_critic = None):
@@ -141,13 +140,6 @@ class Trainer:
             # If we're combining mse and critic loss, report both independently
             if self.mse_decay > 0:
                 self.feed_dict[self.mse_weight] = self.current_mse_weight
-<<<<<<< HEAD
-            if self.dann_critic:
-                self.feed_dict[self.clean] = batch['clean']
-            
-             
-            if training:
-=======
 
                 ops = [self.mse_loss, self.critic_loss, self.loss]
 
@@ -161,7 +153,6 @@ class Trainer:
             
             # Just critic loss
             elif training:
->>>>>>> 00b8ab3e6ab3c1b2791ce0e60040d70a138c039e
                 batch_loss, _ = sess.run([self.loss, self.train], feed_dict = self.feed_dict)
             else:
                 batch_loss = sess.run(self.loss, feed_dict = self.feed_dict)
