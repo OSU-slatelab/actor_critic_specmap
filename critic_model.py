@@ -112,7 +112,7 @@ class Critic:
         self.training = tf.placeholder(dtype = tf.bool, name = "training")
         self.labels = tf.placeholder(dtype = tf.float32, shape = (None, output_size), name = "labels")
 
-        self.create_model()
+        self._create_model()
 
     def _create_model(self):
         """ Put together all the parts of the critic model. """
