@@ -114,10 +114,10 @@ def run_training():
         for epoch in range(1, 200):
             print('Epoch %d' % epoch)
 
-            train_loss, duration = trainer.run_ops(sess, train_loader, training = True, pretrain = True)
+            train_loss, duration = trainer.run_ops(sess, train_loader, training = True)
             print ('\nTrain loss: %.6f (%.3f sec)' % (train_loss, duration))
 
-            eval_loss, duration = trainer.run_ops(sess, dev_loader, training = False, pretrain = True)
+            eval_loss, duration = trainer.run_ops(sess, dev_loader, training = False)
             print('\nEval loss: %.6f (%.3f sec)' % (eval_loss, duration))
 
             # Save if we've got the best loss so far
