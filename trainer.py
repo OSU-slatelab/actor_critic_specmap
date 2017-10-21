@@ -25,6 +25,8 @@ class Trainer:
             max_global_norm,
             l2_weight = 0.,
             mse_decay = 0.,
+            min_mse   = 0.,
+            optim = 'adam',
             critic = None,
             actor = None,
             output_critic = None):
@@ -84,7 +86,7 @@ class Trainer:
                 predictions = tf.nn.softmax(critic.outputs)
 
                 loss = tf.losses.mean_squared_error(labels=labels, predictions=predictions)
-                self.critic_loss = tf.reduce_mean(loss)
+                self.critic_loss = tf.reduce_mean(loss) * 1000
 
                 # This checks whether or not we're including mse loss
                 if mse_decay > 0:
@@ -94,7 +96,8 @@ class Trainer:
                     loss = tf.losses.mean_squared_error(labels=self.clean, predictions=actor.outputs)
                     self.mse_loss = tf.reduce_mean(loss)
 
-                    self.loss = (1-self.mse_weight) * self.critic_loss + self.mse_weight * self.mse_loss
+                    self.loss = (1-self.mse_weight) * (1-min_mse) * self.critic_loss + \
+                        (self.mse_weight * (1-min_mse) + min_mse) * self.mse_loss
                 else:
                     self.loss = self.critic_loss
 
@@ -104,6 +107,7 @@ class Trainer:
         self.learning_rate = learning_rate
         self.max_global_norm = max_global_norm
         self.mse_decay = mse_decay
+        self.optim = optim
 
         self._create_train_op()
 
@@ -113,7 +117,10 @@ class Trainer:
         grads = tf.gradients(self.loss, self.var_list)
         grads, _ = tf.clip_by_global_norm(grads, clip_norm=self.max_global_norm)
         grad_var_pairs = zip(grads, self.var_list)
-        optim = tf.train.AdamOptimizer(self.learning_rate)
+        if self.optim == 'adam':
+            optim = tf.train.AdamOptimizer(self.learning_rate)
+        else:
+            optim = tf.train.MomentumOptimizer(self.learning_rate, 0.9, use_nesterov=True)
         self.train = optim.apply_gradients(grad_var_pairs)
 
     def run_ops(self, sess, loader, training = True):

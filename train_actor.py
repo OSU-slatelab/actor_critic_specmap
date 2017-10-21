@@ -31,6 +31,8 @@ parser.add_argument("--lr", type=float, default=0.0002, help="initial learning r
 parser.add_argument("--max_global_norm", type=float, default=5.0, help="global max norm for clipping")
 parser.add_argument("--l2_weight", type=float, default=0)
 parser.add_argument("--mse_decay", type=float, default=0)
+parser.add_argument("--min_mse", type=float, default=0)
+parser.add_argument("--optim", default="adam")
 
 # Model
 parser.add_argument("--alayers", type=int, default=2)
@@ -91,7 +93,7 @@ def run_training():
                 layers      = a.clayers,
                 output_size = a.senones,
                 dropout     = a.dropout)
-            
+
         # Create loader for train data
         train_loader = DataLoader(
             base_dir    = a.base_directory,
@@ -120,7 +122,16 @@ def run_training():
         #print("Total dev frames:", dev_loader.frame_count)
 
         with tf.variable_scope('trainer'):
-            trainer = Trainer(a.lr, a.max_global_norm, a.l2_weight, a.mse_decay, critic, actor, output_critic)
+            trainer = Trainer(
+                learning_rate   = a.lr,
+                max_global_norm = a.max_global_norm,
+                l2_weight       = a.l2_weight,
+                mse_decay       = a.mse_decay,
+                min_mse         = a.min_mse,
+                optim           = a.optim,
+                critic          = critic,
+                actor           = actor,
+                output_critic   = output_critic)
 
         # Saver is also loader
         actor_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='actor')
@@ -139,7 +150,7 @@ def run_training():
         else:
             sess.run(tf.variables_initializer(actor_vars))
         sess.run(tf.variables_initializer(trainer_vars))
-        
+
         # Perform training
         min_loss = float('inf')
         for epoch in range(1, 200):
@@ -161,21 +172,27 @@ def run_training():
                 trainer.current_mse_weight *= a.mse_decay
                 mse_loss, critic_loss, eval_loss, duration = feedback
                 print('\nMSE loss: %.6f -- Critic loss: %.6f' % (mse_loss, critic_loss))
+
+                if critic_loss < min_loss:
+                    min_loss = critic_loss
+                    save_file = os.path.join(a.actor_checkpoints, f"model-{critic_loss}.ckpt")
+                    save_path = actor_saver.save(sess, save_file, global_step=epoch)
+
             else:
                 eval_loss, duration = feedback
+
+                # Save if we've got the best loss so far
+                if eval_loss < min_loss:
+                    min_loss = eval_loss
+                    save_file = os.path.join(a.actor_checkpoints, f"model-{eval_loss}.ckpt")
+                    save_path = actor_saver.save(sess, save_file, global_step=epoch)
+
                 print()
             print('Eval loss: %.6f (%.3f sec)\n' % (eval_loss, duration))
 
-            # Save if we've got the best loss so far
-            if eval_loss < min_loss:
-                min_loss = eval_loss
-                save_file = os.path.join(a.actor_checkpoints, f"model-{eval_loss}.ckpt")
-                save_path = actor_saver.save(sess, save_file, global_step=epoch)
-
 def main():
     run_training()
-    
+
 if __name__=='__main__':
-    main()    
-    
+    main()
 
