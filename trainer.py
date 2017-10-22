@@ -89,9 +89,9 @@ class Trainer:
                 self.critic_loss = tf.reduce_mean(loss) * 1000
 
                 # This checks whether or not we're including mse loss
-                if mse_decay > 0:
+                if mse_decay > 0 or min_mse > 0:
                     self.mse_weight = tf.placeholder(tf.float32)
-                    self.current_mse_weight = 1.0
+                    self.current_mse_weight = 1.0 if mse_decay > 0 else 0.0
 
                     loss = tf.losses.mean_squared_error(labels=self.clean, predictions=actor.outputs)
                     self.mse_loss = tf.reduce_mean(loss)
@@ -107,6 +107,7 @@ class Trainer:
         self.learning_rate = learning_rate
         self.max_global_norm = max_global_norm
         self.mse_decay = mse_decay
+        self.min_mse = min_mse
         self.optim = optim
 
         self._create_train_op()
@@ -145,7 +146,7 @@ class Trainer:
                 self.feed_dict[self.clean] = batch['clean']
 
             # If we're combining mse and critic loss, report both independently
-            if self.mse_decay > 0:
+            if self.mse_decay > 0 or self.min_mse > 0:
                 self.feed_dict[self.mse_weight] = self.current_mse_weight
 
                 ops = [self.mse_loss, self.critic_loss, self.loss]
@@ -175,7 +176,7 @@ class Trainer:
         duration = time.time() - start_time
 
         loader.reset()
-        if self.mse_decay > 0:
+        if self.mse_decay > 0 or self.min_mse > 0:
             avg_mse_loss = tot_mse_loss / frames
             avg_critic_loss = tot_critic_loss / frames
             return avg_mse_loss, avg_critic_loss, avg_loss, duration

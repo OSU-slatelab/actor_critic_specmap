@@ -39,6 +39,7 @@ parser.add_argument("--alayers", type=int, default=2)
 parser.add_argument("--aunits", type=int, default=2048)
 parser.add_argument("--clayers", type=int, default=6)
 parser.add_argument("--cunits", type=int, default=1024)
+parser.add_argument("--cblock_size", type=int, default=0)
 parser.add_argument("--dropout", type=float, default=0.5, help="percentage of neurons to drop")
 
 # Data
@@ -82,6 +83,7 @@ def run_training():
                 inputs      = clean_input,
                 layer_size  = a.cunits,
                 layers      = a.clayers,
+                block_size  = a.cblock_size,
                 output_size = a.senones,
                 dropout     = a.dropout)
 
@@ -158,7 +160,7 @@ def run_training():
 
             # Run train ops
             feedback = trainer.run_ops(sess, train_loader, training = True)
-            if a.mse_decay > 0:
+            if a.mse_decay > 0 or a.min_mse > 0:
                 mse_loss, critic_loss, train_loss, duration = feedback
                 print('\nMSE loss: %.6f -- Critic loss: %.6f' % (mse_loss, critic_loss))
             else:
@@ -168,7 +170,7 @@ def run_training():
 
             # Run eval ops
             feedback = trainer.run_ops(sess, dev_loader, training = False)
-            if a.mse_decay > 0:
+            if a.mse_decay > 0 or a.min_mse > 0:
                 trainer.current_mse_weight *= a.mse_decay
                 mse_loss, critic_loss, eval_loss, duration = feedback
                 print('\nMSE loss: %.6f -- Critic loss: %.6f' % (mse_loss, critic_loss))
