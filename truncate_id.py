@@ -14,7 +14,7 @@ import os
 #   outputfile.write(wrds[0][:8] + "  " + wrds[1]+ "\n")
 
 currentfile = open(sys.argv[1])
-outputfile = open(sys.argv[1]+".out","w");
+outputfile = open(sys.argv[1]+".mod","w");
 for line in currentfile:
     wrds = line.split()
     s = list(wrds[0])

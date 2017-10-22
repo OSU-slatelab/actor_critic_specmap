@@ -212,7 +212,6 @@ class DataLoader:
         self.uid = uid_new
 
         ids = sorted(ark_dict.keys())
-
         if not hasattr(self, 'offset_frames'):
             self.offset_frames = np.empty((0, ark_dict[ids[0]].shape[1]), np.float32)
 

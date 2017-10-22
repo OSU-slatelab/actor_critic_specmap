@@ -5,7 +5,7 @@ fnoisy = open("feats_dev.scp")
 fclean = open("feats_dev_clean.scp")
 
 fnoisy_orig = open("feats_dev_noisy_orig.scp","w")
-#fsenone_orig = open("clean_labels_dev_mod.txt","w")
+fsenone_orig = open("clean_labels_dev_mod.txt","w")
 fclean_orig = open("feats_dev_clean_orig.scp","w")
 
 dictnoisy={}
@@ -35,6 +35,6 @@ for utt_id in sorted(dictnoisy.keys()):
     senone = senonedict[search_key]
     fnoisy_orig.write(search_key+"_"+str(line)+" "+search_path+"\n")
     fclean_orig.write(search_key+"_"+str(line)+" "+search_path_clean+"\n")
-    #fsenone_orig.write(search_key+"_"+str(line)+" "+" ".join(senone)+"\n")
+    fsenone_orig.write(search_key+"_"+str(line)+" "+" ".join(senone)+"\n")
     line = (line + 1)%6
 
