@@ -31,6 +31,7 @@ parser.add_argument("--l2_weight", type=float, default=0)
 # Model
 parser.add_argument("--alayers", type=int, default=2)
 parser.add_argument("--aunits", type=int, default=2048)
+parser.add_argument("--ablock_size", type=int, default=0)
 parser.add_argument("--dropout", type=float, default=0.5, help="percentage of neurons to drop")
 
 # Data
@@ -62,6 +63,7 @@ def run_training():
                 output_shape  = output_shape,
                 layer_size    = a.aunits,
                 layers        = a.alayers,
+                block_size    = a.ablock_size,
                 output_frames = output_frames,
                 dropout       = a.dropout,
             )

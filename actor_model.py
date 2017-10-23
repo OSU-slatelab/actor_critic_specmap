@@ -23,6 +23,7 @@ class Actor:
             output_shape,
             layer_size = 2048,
             layers = 2,
+            block_size = 0,
             output_frames = 11,
             dropout = 0.1,
             filters = 64):
@@ -55,6 +56,7 @@ class Actor:
         self.dropout = dropout
         self.layer_size = layer_size
         self.layers = layers
+        self.block_size = block_size
         self.filters = filters
         
         # Whether or not we're training
@@ -79,17 +81,25 @@ class Actor:
     def _dnn_frame_output(self, inputs, reuse = True):
         """Generate the graph for a single frame of output"""
 
-        layer = tf.reshape(inputs,
+        inputs = tf.reshape(inputs,
                 shape = (-1, (self.context_frames + 1) * self.input_shape[2]))
 
-        for i in range(self.layers):
-            with tf.variable_scope('actor_layer' + str(i), reuse = reuse):
-                layer = self._dense(layer)
+        with tf.variable_scope('hidden0', reuse = reuse):
+            hidden = self._dense(inputs)
+
+        # Store residual for bypass
+        residual = hidden
+
+        for i in range(1, self.layers):
+            with tf.variable_scope('hidden' + str(i), reuse = reuse):
+                hidden = self._dense(hidden)
+
+                if self.block_size != 0 and i % self.block_size == 0:
+                    hidden += residual
+                    residual = hidden
 
         with tf.variable_scope('output_layer', reuse = reuse):
-            output = tf.layers.dense(layer, self.output_shape[2])
-
-        #output += inputs[:, self.context_frames // 2, 0:self.output_shape[2]]
+            output = tf.layers.dense(hidden, self.output_shape[2])
 
         return output
 
