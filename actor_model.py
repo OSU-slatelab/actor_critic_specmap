@@ -84,22 +84,22 @@ class Actor:
         inputs = tf.reshape(inputs,
                 shape = (-1, (self.context_frames + 1) * self.input_shape[2]))
 
-        with tf.variable_scope('hidden0', reuse = reuse):
-            hidden = self._dense(inputs)
+        with tf.variable_scope('actor_layer0', reuse = reuse):
+            layer = self._dense(inputs)
 
         # Store residual for bypass
-        residual = hidden
+        residual = layer
 
         for i in range(1, self.layers):
-            with tf.variable_scope('hidden' + str(i), reuse = reuse):
-                hidden = self._dense(hidden)
+            with tf.variable_scope('actor_layer' + str(i), reuse = reuse):
+                layer = self._dense(layer)
 
                 if self.block_size != 0 and i % self.block_size == 0:
-                    hidden += residual
-                    residual = hidden
+                    layer += residual
+                    residual = layer
 
         with tf.variable_scope('output_layer', reuse = reuse):
-            output = tf.layers.dense(hidden, self.output_shape[2])
+            output = tf.layers.dense(layer, self.output_shape[2])
 
         return output
 
