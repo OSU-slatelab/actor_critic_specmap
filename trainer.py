@@ -82,11 +82,11 @@ class Trainer:
                 self.labels = critic.labels
                 self.clean = output_critic.inputs
 
-                labels = tf.nn.softmax(output_critic.outputs)
-                predictions = tf.nn.softmax(critic.outputs)
+                labels = output_critic.outputs
+                predictions = critic.outputs
 
                 loss = tf.losses.mean_squared_error(labels=labels, predictions=predictions)
-                self.critic_loss = tf.reduce_mean(loss) * 1000
+                self.critic_loss = tf.reduce_mean(loss) / 10
 
                 # This checks whether or not we're including mse loss
                 if mse_decay > 0 or min_mse > 0:
