@@ -8,6 +8,7 @@ Date:   Fall 2017
 """
 
 import tensorflow as tf
+from critic_model import batch_norm
 
 class Actor:
     """
@@ -84,6 +85,8 @@ class Actor:
         inputs = tf.reshape(inputs,
                 shape = (-1, (self.context_frames + 1) * self.input_shape[2]))
 
+        inputs = tf.layers.dropout(inputs, self.dropout, self.training)
+
         with tf.variable_scope('actor_layer0', reuse = reuse):
             layer = self._dense(inputs)
 
@@ -100,6 +103,7 @@ class Actor:
 
         with tf.variable_scope('output_layer', reuse = reuse):
             output = tf.layers.dense(layer, self.output_shape[2])
+            output = batch_norm(output, (self.output_shape[2], self.output_shape[2]), self.training)
 
         return output
 
@@ -112,8 +116,10 @@ class Actor:
                 activation         = tf.nn.relu,
                 kernel_initializer = tf.random_normal_initializer(0, 0.02))
 
-        layer = tf.layers.batch_normalization(
-                inputs = layer)
+        layer = batch_norm(
+                x        = layer,
+                shape    = (self.layer_size, self.layer_size),
+                training = self.training)
 
         layer = tf.layers.dropout(
                 inputs   = layer,
