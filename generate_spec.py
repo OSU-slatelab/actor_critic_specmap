@@ -52,15 +52,12 @@ def run_training(a):
         dev_loader = DataLoader(
             base_dir    = a.base_directory,
             frame_file  = a.frame_dev_file,
-            senone_file = a.senone_dev_file,
             batch_size  = a.batch_size,
             buffer_size = a.buffer_size,
             context     = a.context,
             out_frames  = output_frames,
             shuffle     = False,
             clean_file  = a.clean_dev_file)
-
-        print("Total dev frames:", dev_loader.frame_count)
 
         # Saver is also loader
         actor_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='actor')
@@ -78,9 +75,9 @@ def run_training(a):
 
             outputs = sess.run(actor.outputs, fd)
 
-            printSpec(batch['frame'][201], "actor_input.png")
-            printSpec(batch['clean'][201], "actor_clean.png")
-            printSpec(outputs[201], "actor_output.png")
+            printSpec(batch['frame'][501], "actor_input.png")
+            printSpec(batch['clean'][501], "actor_clean.png")
+            printSpec(outputs[501], "actor_output.png")
             
             break
             
@@ -92,7 +89,6 @@ def main():
     parser.add_argument("--base_directory", default=os.getcwd(), help="The directory the data is in")
     parser.add_argument("--frame_dev_file", default="data-fbank/dev_dt_05_delta_noisy_global_normalized/feats.scp.mod") 
     parser.add_argument("--clean_dev_file", default="data-fbank/dev_dt_05_clean_global_normalized/feats.scp.mod") 
-    parser.add_argument("--senone_dev_file", default="clean_labels_dev_mod.txt") 
     parser.add_argument("--actor_checkpoints", default="actor_checkpoints/", help="directory with actor weights")
 
     # Model
@@ -105,7 +101,7 @@ def main():
     parser.add_argument("--output_featdim", type=int, default=40)
     parser.add_argument("--context", type=int, default=5)
     parser.add_argument("--buffer_size", default=10, type=int)
-    parser.add_argument("--batch_size", default=256, type=int)
+    parser.add_argument("--batch_size", default=1024, type=int)
     a = parser.parse_args()
 
     run_training(a)
