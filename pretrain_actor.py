@@ -19,8 +19,6 @@ parser.add_argument("--frame_train_file", default="data-spectrogram/train_si84_d
 parser.add_argument("--frame_dev_file", default="data-spectrogram/dev_dt_05_delta_noisy_global_normalized/feats.scp.mod", help="The input feature file for cross-validation")
 parser.add_argument("--clean_train_file", default="data-fbank/train_si84_clean_global_normalized/feats.scp", help="The input feature file for training")
 parser.add_argument("--clean_dev_file", default="data-fbank/dev_dt_05_clean_global_normalized/feats.scp.mod", help="The input feature file for cross-validation")
-parser.add_argument("--senone_train_file", default="clean_labels_train.txt", help="The senone file for clean training labels")
-parser.add_argument("--senone_dev_file", default="clean_labels_dev_mod.txt", help="The senone file for clean cross-validation labels")
 parser.add_argument("--actor_pretrain", default="actor_pretrain", help="Directory to store pre-trained weights")
 
 # Training
@@ -55,7 +53,7 @@ def run_training():
         with tf.variable_scope('actor'):
 
             # Output of actor is input of critic, so output context plus frame
-            output_frames = 2*a.context + 1
+            output_frames = 1
             shape = (None, output_frames + 2*a.context, a.input_featdim)
             output_shape = (None, output_frames + 2*a.context, a.output_featdim)
             actor = Actor(
@@ -72,12 +70,12 @@ def run_training():
         train_loader = DataLoader(
             base_dir    = a.base_directory,
             frame_file  = a.frame_train_file,
-            senone_file = a.senone_train_file,
             batch_size  = a.batch_size,
             buffer_size = a.buffer_size,
             context     = a.context,
-            out_frames  = 1 + 2 * a.context,
+            out_frames  = output_frames,
             shuffle     = True,
+            input_featdim = a.input_featdim,
             clean_file  = a.clean_train_file)
 
         print("Total train frames:", train_loader.frame_count)
@@ -86,18 +84,18 @@ def run_training():
         dev_loader = DataLoader(
             base_dir    = a.base_directory,
             frame_file  = a.frame_dev_file,
-            senone_file = a.senone_dev_file,
             batch_size  = a.batch_size,
             buffer_size = a.buffer_size,
             context     = a.context,
-            out_frames  = 1 + 2 * a.context,
+            out_frames  = output_frames,
             shuffle     = False,
+            input_featdim = a.input_featdim,
             clean_file  = a.clean_dev_file)
 
         print("Total dev frames:", dev_loader.frame_count)
 
         with tf.variable_scope('trainer'):
-            trainer = Trainer(a.lr, a.max_global_norm, a.l2_weight, actor = actor)
+            trainer = Trainer(a.lr, a.max_global_norm, a.l2_weight, optim = 'adam_decay', actor = actor)
 
         # Saver is also loader
         actor_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='actor')
