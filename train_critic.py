@@ -28,10 +28,9 @@ parser.add_argument("--dropout", type=float, default=0.5, help="percentage of ne
 parser.add_argument("--buffer_size", default=10, type=int)
 parser.add_argument("--batch_size", default=1024, type=int)
 parser.add_argument("--l2_weight", default=0, type=float)
+parser.add_argument("--optim", default="adam_decay")
 
 # Model
-parser.add_argument("--alayers", type=int, default=2)
-parser.add_argument("--aunits", type=int, default=2048)
 parser.add_argument("--clayers", type=int, default=7)
 parser.add_argument("--cunits", type=int, default=1024)
 parser.add_argument("--cblock_size", type=int, default=0)
@@ -73,7 +72,8 @@ def run_training():
             buffer_size = a.buffer_size,
             context     = a.context,
             out_frames  = 1,
-            shuffle     = True)
+            shuffle     = True,
+            input_featdim = a.input_featdim)
 
         print("Frames in train data:", train_loader.frame_count)
 
@@ -86,13 +86,14 @@ def run_training():
             buffer_size = a.buffer_size,
             context     = a.context,
             out_frames  = 1,
-            shuffle     = False)
+            shuffle     = False,
+            input_featdim = a.input_featdim)
 
         print("Frames in dev data:", dev_loader.frame_count)
 
         # Class for training
         with tf.variable_scope('trainer'):
-            trainer = Trainer(a.lr, a.max_global_norm, a.l2_weight, critic=critic)
+            trainer = Trainer(a.lr, a.max_global_norm, a.l2_weight, optim=a.optim, critic=critic)
 
         # Save all variables
         saver = tf.train.Saver()
