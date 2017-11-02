@@ -125,6 +125,7 @@ class Critic:
         with tf.variable_scope("hidden0"):
                 hidden = feedforward_layer(inputs, (flat_len, self.layer_size))
                 hidden = lrelu(hidden, 0.3)
+                hidden = tf.layers.dropout(hidden, self.dropout, self.training)
         
         # Store residual for connection
         residual = hidden
@@ -134,6 +135,7 @@ class Critic:
                 hidden = feedforward_layer(hidden, (self.layer_size, self.layer_size))
                 hidden = lrelu(hidden, 0.3)
                 hidden = batch_norm(hidden, (self.layer_size, self.layer_size), self.training)
+                hidden = tf.layers.dropout(hidden, self.dropout, self.training)
 
             # Add residual connection
             if self.block_size != 0 and i % self.block_size == 0:
