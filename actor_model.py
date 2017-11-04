@@ -85,7 +85,7 @@ class Actor:
         inputs = tf.reshape(inputs,
                 shape = (-1, (self.context_frames + 1) * self.input_shape[2]))
 
-        inputs = tf.layers.dropout(inputs, self.dropout, self.training)
+        #inputs = tf.layers.dropout(inputs, self.dropout, self.training)
 
         with tf.variable_scope('actor_layer0', reuse = reuse):
             layer = self._dense(inputs)
@@ -103,7 +103,7 @@ class Actor:
 
         with tf.variable_scope('output_layer', reuse = reuse):
             output = tf.layers.dense(layer, self.output_shape[2])
-            output = batch_norm(output, (self.output_shape[2], self.output_shape[2]), self.training)
+            #output = batch_norm(output, (self.output_shape[2], self.output_shape[2]), self.training)
 
         return output
 

@@ -123,7 +123,7 @@ class Trainer:
             self.train = optim.apply_gradients(grad_var_pairs)
         elif self.optim == 'adam_decay':
             global_step = tf.Variable(0, trainable=False)
-            learning_rate = tf.train.exponential_decay(self.learning_rate, global_step, 1e4, 0.96)
+            learning_rate = tf.train.exponential_decay(self.learning_rate, global_step, 1e4, 0.9)
             optim = tf.train.AdamOptimizer(learning_rate)
             self.train = optim.apply_gradients(grad_var_pairs, global_step=global_step)
         else:
