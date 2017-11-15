@@ -10,6 +10,15 @@ Date:   Fall 2017
 import tensorflow as tf
 from critic_model import batch_norm
 
+def prelu(_x):
+  alphas = tf.get_variable('alpha', _x.get_shape()[-1],
+                       initializer=tf.constant_initializer(0.0),
+                        dtype=tf.float32)
+  pos = tf.nn.relu(_x)
+  neg = alphas * (_x - abs(_x)) * 0.5
+
+  return pos + neg
+
 class Actor:
     """
     This actor model takes noisy speech as input, and outputs clean speech.
@@ -27,7 +36,7 @@ class Actor:
             block_size = 0,
             output_frames = 11,
             dropout = 0.1,
-            filters = 64):
+            batch_norm = False):
         """
         Create actor model.
 
@@ -41,7 +50,7 @@ class Actor:
          * output_frames : int
             Number of output frames (should be the same as input frames for critic)
         """
-        
+
         # Compute shape of input and output
         self.inputs = tf.placeholder(dtype = tf.float32, shape = input_shape, name = "inputs")
         self.input_shape = input_shape
@@ -53,18 +62,19 @@ class Actor:
 
         # Every frame past the size of the output is a context frame
         self.context_frames = self.input_shape[1] - output_frames
+
         # Layer params
         self.dropout = dropout
         self.layer_size = layer_size
         self.layers = layers
         self.block_size = block_size
-        self.filters = filters
-        
+        self.batch_norm = batch_norm
+
         # Whether or not we're training
         self.training = tf.placeholder(dtype = tf.bool, name = "training")
 
         self._create_model()
-        
+
 
     def _create_model(self):
         """Put together all the parts of the actor model."""
@@ -85,7 +95,7 @@ class Actor:
         inputs = tf.reshape(inputs,
                 shape = (-1, (self.context_frames + 1) * self.input_shape[2]))
 
-        #inputs = tf.layers.dropout(inputs, self.dropout, self.training)
+        inputs = tf.layers.dropout(inputs, self.dropout, self.training)
 
         with tf.variable_scope('actor_layer0', reuse = reuse):
             layer = self._dense(inputs)
@@ -103,7 +113,6 @@ class Actor:
 
         with tf.variable_scope('output_layer', reuse = reuse):
             output = tf.layers.dense(layer, self.output_shape[2])
-            #output = batch_norm(output, (self.output_shape[2], self.output_shape[2]), self.training)
 
         return output
 
@@ -112,52 +121,20 @@ class Actor:
 
         layer = tf.layers.dense(
                 inputs             = inputs,
-                units              = self.layer_size,
-                activation         = tf.nn.relu,
-                kernel_initializer = tf.random_normal_initializer(0, 0.02))
+                units              = self.layer_size)
 
-        layer = batch_norm(
-                x        = layer,
-                shape    = (self.layer_size, self.layer_size),
-                training = self.training)
+        if self.batch_norm:
+            layer = batch_norm(
+                    x        = layer,
+                    shape    = (self.layer_size, self.layer_size),
+                    training = self.training)
+
+        layer = prelu(layer)
 
         layer = tf.layers.dropout(
                 inputs   = layer,
                 rate     = self.dropout,
                 training = self.training)
-        
-        return layer
-
-    def _cnn_frame_output(self, inputs, reuse = True):
-        """Generate the graph for a single frame of output"""
-
-        layer = tf.expand_dims(inputs, 3)
-
-        for i in range(self.layers):
-            with tf.variable_scope('actor_layer' + str(i), reuse = reuse):
-                layer = self._conv(layer)
-
-        with tf.variable_scope('output_layer', reuse = reuse):
-            output = tf.reshape(layer,
-                    shape=(-1, (self.context_frames + 1) * self.input_shape[2] * self.filters))
-            output = tf.layers.dense(output, self.output_shape[2])
-
-        #output += inputs[:, self.context_frames // 2, 0:self.output_shape[2]]
-
-        return output
-
-    def _conv(self, inputs):
-        """Convolutional layer, with activation and batch norm."""
-
-        layer = tf.layers.conv2d(
-                inputs      = inputs,
-                filters     = self.filters,
-                kernel_size = 3,
-                padding     = "same",
-                activation  = tf.nn.relu)
-
-        layer = tf.layers.batch_normalization(
-                inputs = layer)
 
         return layer
 
