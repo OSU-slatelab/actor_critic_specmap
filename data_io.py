@@ -8,6 +8,7 @@ import gzip
 import logging
 import numpy as np
 import struct
+from random import shuffle
 
 logger = logging.getLogger(__name__)
 
@@ -27,50 +28,6 @@ def smart_open(filename, mode=None):
          mode = "r"
         return open(filename, mode)
 
-def np_from_text(text_fn, phonedict, txt_base_dir=""):
-    ark_dict = {}
-    with open(text_fn) as f:
-        for line in f:
-            if line == "":
-                continue
-        utt_id = line.replace("\n", "").split(" ")[0]
-        text = line.replace("\n", "").split(" ")[1:]
-        rows = len(text)
-        #cols = 51
-        utt_mat = np.zeros((rows))
-    for i in range(len(text)):
-        utt_mat[i] = phonedict[text[i]]
-        ark_dict[utt_id] = utt_mat
-    return ark_dict
-
-def read_senones_from_text(uid, offset, batch_size, buffer_size, senone_fn, senone_base_dir=""): 
-    senonedict = {}
-    totframes = 0
-    lines = 0
-    with open(senone_fn) as f:
-        for line in f:
-            lines += 1
-            if lines<=uid:
-                continue
-            if line == "":
-                continue
-            A = []
-            utt_id = line.split()[0]
-            prev_word = ""
-            for word in line.split():
-                if prev_word=='[':
-                    A.append(word)
-                prev_word=word
-            totframes += len(A)
-            senone_mat = np.zeros((len(A),1999))
-            for i in range(len(A)):
-                senone_mat[i][int(A[i])] = 1
-            senonedict[utt_id] = senone_mat
-            if totframes>=(batch_size*buffer_size-offset):
-                break
-
-    return senonedict, lines
-            
 def read_kaldi_ark_from_scp(uid, offset, batch_size, buffer_size, scp_fn, ark_base_dir=""):
     """
     Read a binary Kaldi archive and return a dict of Numpy matrices, with the
@@ -127,6 +84,54 @@ def kaldi_write_mats(ark_path, utt_id, utt_mat):
     ark_write_buf.write(struct.pack('<bi', 4, cols))
     ark_write_buf.write(utt_mat)
 
+def load_utterance_locations(data_dir, frame_file):
+
+    locations = {}
+
+    with open(os.path.join(data_dir, frame_file)) as f:
+        for line in f:
+            utterance_id, path = line.replace("\n", "").split()
+            path, location = path.split(":")
+            ark_path = os.path.join(data_dir, path)
+            locations[utterance_id] = int(location)
+
+    return locations, ark_path
+
+def read_mat(buff, byte):
+    buff.seek(byte, 0)
+    header = struct.unpack("<xcccc", buff.read(5))
+    m, rows = struct.unpack("<bi", buff.read(5))
+    n, cols = struct.unpack("<bi", buff.read(5))
+    tmp_mat = np.frombuffer(buff.read(rows * cols * 4), dtype=np.float32)
+    return np.reshape(tmp_mat, (rows, cols))
+
+def load_senones(data_dir, senone_file):
+
+    senones = {}
+
+    with open(os.path.join(data_dir, senone_file)) as f:
+        for line in f:
+            line = line.split()
+            labels = [int(line[i]) for i in range(2, len(line), 4)]
+            onehot = np.zeros((len(labels), 1999), dtype=np.int)
+            for i, label in enumerate(labels):
+                onehot[i, label] = 1
+
+            senones[line[0]] = onehot
+
+    return senones
+
+def count_frames(data_dir, frame_file, input_featdim):
+
+    frame_count = 0
+    current_byte = 0
+
+    for line in open(os.path.join(data_dir, frame_file)):
+        byte = int(line[line.index(':') + 1 :])
+        frame_count += (byte - current_byte - 25) // 4 // input_featdim
+        current_byte = byte
+
+    return frame_count
 
 class DataLoader:
     """ Class for loading features and senone labels from file into a buffer, and batching. """
@@ -140,88 +145,105 @@ class DataLoader:
             out_frames,
             shuffle,
             input_featdim = 771,
-            senone_file=None,
-            clean_file=None):
+            clean_file = None,
+            senone_file = None,
+        ):
+
         """ Initialize the data loader including filling the buffer """
-        self.data_dir = base_dir
-        self.frame_file = frame_file
         self.batch_size = batch_size
         self.buffer_size = buffer_size
         self.context = context
         self.out_frames = out_frames
         self.shuffle = shuffle
-        self.input_featdim = input_featdim
-        self.senone_file = senone_file
-        self.clean_file = clean_file
-        
+
         self.uid = 0
         self.offset = 0
 
-        self._count_frames()
+        in_locations, self.in_ark_path = load_utterance_locations(base_dir, frame_file)
+
+        self.clean_file = clean_file
+        if clean_file:
+            clean_locations, self.clean_ark_path = load_utterance_locations(base_dir, clean_file)
+
+        self.senone_file = senone_file
+        if senone_file:
+            senone_labels = load_senones(base_dir, senone_file)
+
+        self.locations = []
+        for key in in_locations:
+            location = {'id':key, 'in_byte': in_locations[key]}
+
+            if clean_file:
+                location['clean_byte'] = clean_locations[key]
+
+            if senone_file:
+                location['senones'] = senone_labels[key]
+
+            self.locations.append(location)
+
+        self.frame_count = count_frames(base_dir, frame_file, input_featdim)
 
         self.empty = True
 
-    def _count_frames(self):
 
-        self.frame_count = 0
-
-        current_byte = 0
-
-        for line in open(os.path.join(self.data_dir, self.frame_file)):
-            byte = int(line[line.index(':') + 1 :])
-            self.frame_count += (byte - current_byte - 25) // 4 // self.input_featdim
-            current_byte = byte
-
-
-    def read_mats(self, frame_file):
+    def read_mats(self):
         """ Read features from file into a buffer """
-        #Read a buffer containing buffer_size*batch_size+offset 
+        #Read a buffer containing buffer_size*batch_size+offset
         #Returns a line number of the scp file
-        scp_fn = os.path.join(self.data_dir, frame_file)
-        ark_dict, uid = read_kaldi_ark_from_scp(
-                self.uid,
-                self.offset,
-                self.batch_size,
-                self.buffer_size,
-                scp_fn,
-                self.data_dir)
 
-        return ark_dict, uid
+        result = {'in_dict':{}}
+        in_ark_buffer = smart_open(self.in_ark_path, "rb")
 
-    def read_senones(self):
-        """ Read senones from file """
-        scp_fn = os.path.join(self.data_dir, self.senone_file)
-        senone_dict, uid = read_senones_from_text(
-                self.uid,
-                self.offset,
-                self.batch_size,
-                self.buffer_size,
-                scp_fn,
-                self.data_dir)
+        if self.clean_file is not None:
+            result['clean_dict'] = {}
+            clean_ark_buffer = smart_open(self.clean_ark_path, "rb")
 
-        return senone_dict, uid
+        if self.senone_file is not None:
+            result['senone_dict'] = {}
+
+        totframes = 0
+        while totframes < self.batch_size * self.buffer_size - self.offset and self.uid < len(self.locations):
+            in_mat = read_mat(in_ark_buffer, self.locations[self.uid]['in_byte'])
+            result['in_dict'][self.locations[self.uid]['id']] = in_mat
+
+            if self.clean_file is not None:
+                clean_mat = read_mat(clean_ark_buffer, self.locations[self.uid]['clean_byte'])
+                result['clean_dict'][self.locations[self.uid]['id']] = clean_mat
+
+            if self.senone_file is not None:
+                result['senone_dict'][self.locations[self.uid]['id']] = self.locations[self.uid]['senones']
+
+            totframes += len(in_mat)
+            self.uid += 1
+
+        in_ark_buffer.close()
+
+        if self.clean_file:
+            clean_ark_buffer.close()
+
+        return result
 
     def _fill_buffer(self):
         """ Read data from files into buffers """
 
         # Read data
-        ark_dict, uid_new    = self.read_mats(self.frame_file)
+        mats = self.read_mats()
+        frame_dict = mats['in_dict']
 
         if self.senone_file is not None:
-            senone_dict, uid_new = self.read_senones()
-        
-        if self.clean_file is not None:
-            clean_dict, uid_new  = self.read_mats(self.clean_file)
+            senone_dict = mats['senone_dict']
 
-        if len(ark_dict) == 0:
+        if self.clean_file is not None:
+            clean_dict = mats['clean_dict']
+
+        if len(frame_dict) == 0:
             self.empty = True
             return
 
-        self.uid = uid_new
+        ids = sorted(frame_dict.keys())
 
-        ids = sorted(ark_dict.keys())
         if not hasattr(self, 'offset_frames'):
-            self.offset_frames = np.empty((0, ark_dict[ids[0]].shape[1]), np.float32)
+            self.offset_frames = np.empty((0, frame_dict[ids[0]].shape[1]), np.float32)
 
         if not hasattr(self, 'offset_senones') and self.senone_file is not None:
             self.offset_senones = np.empty((0, senone_dict[ids[0]].shape[1]), np.float32)
@@ -229,8 +251,8 @@ class DataLoader:
         if not hasattr(self, 'offset_clean') and self.clean_file is not None:
             self.offset_clean = np.empty((0, clean_dict[ids[0]].shape[1]), np.float32)
 
-        # Create frame buffer
-        frames = [ark_dict[i] for i in ids]
+        # Create frame buffers
+        frames = [frame_dict[i] for i in ids]
         frames = np.vstack(frames)
         frames = np.concatenate((self.offset_frames, frames), axis=0)
 
@@ -239,7 +261,6 @@ class DataLoader:
             clean = np.vstack(clean)
             clean = np.concatenate((self.offset_clean, clean), axis=0)
 
-        # Create senone buffer
         if self.senone_file is not None:
             senone = [senone_dict[i] for i in ids]
             senone = np.vstack(senone)
@@ -260,7 +281,7 @@ class DataLoader:
                 clean = clean[:cutoff]
 
             self.offset = self.offset_frames.shape[0]
-        
+
         # Generate a random permutation of indexes
         if self.shuffle:
             self.indexes = np.random.permutation(frames.shape[0])
@@ -271,11 +292,7 @@ class DataLoader:
             array     = frames,
             pad_width = ((self.context + self.out_frames // 2,),(0,)),
             mode      = 'edge')
-
         self.frame_buffer = frames
-
-        if self.senone_file is not None:
-            self.senone_buffer = senone
 
         if self.clean_file is not None:
             clean = np.pad(
@@ -284,33 +301,36 @@ class DataLoader:
                 mode      = 'edge')
             self.clean_buffer = clean
 
+        if self.senone_file is not None:
+            self.senone_buffer = senone
 
 
-    def batchify(self, pretrain=False):
+    def batchify(self, shuffle_batches=False, include_deltas=True):
         """ Make a batch of frames and senones """
 
         batch_index = 0
-        if self.empty:
-            self._fill_buffer()
-            self.empty = False
- 
+        self.reset(shuffle_batches)
         batch = {}
+
         while not self.empty:
             start = batch_index * self.batch_size
             end = min((batch_index+1) * self.batch_size, len(self.indexes))
 
-            # Collect the data 
+            # Collect the data
             batch['frame'] = np.stack((self.frame_buffer[i:i+self.out_frames+2*self.context,]
                 for i in self.indexes[start:end]), axis = 0)
 
+            if not include_deltas:
+                batch['frame'] = batch['frame'][:,:,:257]
+
             if self.clean_file is not None:
-                batch['clean'] = np.stack((self.clean_buffer[i:i+self.out_frames]
+                batch['clean'] = np.stack((self.clean_buffer[i:i+self.out_frames,]
                     for i in self.indexes[start:end]), axis = 0)
 
-            if pretrain:
-                batch['label'] = batch['clean']
-            elif self.senone_file is not None:
+            if self.senone_file is not None:
                 batch['label'] = self.senone_buffer[self.indexes[start:end]]
+            elif self.clean_file is not None:
+                batch['label'] = batch['clean']
 
             # Increment batch, and if necessary re-fill buffer
             batch_index += 1
@@ -320,9 +340,12 @@ class DataLoader:
 
             yield batch
 
-    def reset(self):
+
+    def reset(self, shuffle_batches):
         self.uid = 0
         self.offset = 0
         self.empty = False
+        if shuffle_batches:
+            shuffle(self.locations)
 
         self._fill_buffer()
