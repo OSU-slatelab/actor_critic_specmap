@@ -80,7 +80,8 @@ class Critic:
             layers      = 7,
             block_size  = 0,
             output_size = 1999,
-            dropout     = 0.5):
+            dropout     = 0.5,
+            batch_norm  = False):
         """
         Create critic model.
 
@@ -104,9 +105,10 @@ class Critic:
         # Layer params
         self.dropout = dropout
         self.layer_size = layer_size
-        self.layers = layers
+        self.layer_count = layers
         self.block_size = block_size
         self.output_size = output_size
+        self.batch_norm = batch_norm
         
         # Placeholders
         self.training = tf.placeholder(dtype = tf.bool, name = "training")
@@ -123,18 +125,21 @@ class Critic:
         inputs = tf.reshape(self.inputs, (-1, flat_len))
 
         with tf.variable_scope("hidden0"):
-                hidden = feedforward_layer(inputs, (flat_len, self.layer_size))
-                hidden = lrelu(hidden, 0.3)
-                hidden = tf.layers.dropout(hidden, self.dropout, self.training)
+            hidden = feedforward_layer(inputs, (flat_len, self.layer_size))
+            self.layers = [hidden]
+            hidden = lrelu(hidden, 0.3)
+            hidden = tf.layers.dropout(hidden, self.dropout, self.training)
         
         # Store residual for connection
         residual = hidden
 
-        for i in range(1, self.layers):
+        for i in range(1, self.layer_count):
             with tf.variable_scope("hidden%d" % i):
                 hidden = feedforward_layer(hidden, (self.layer_size, self.layer_size))
+                self.layers.append(hidden)
                 hidden = lrelu(hidden, 0.3)
-                hidden = batch_norm(hidden, (self.layer_size, self.layer_size), self.training)
+                if self.batch_norm:
+                    hidden = batch_norm(hidden, (self.layer_size, self.layer_size), self.training)
                 hidden = tf.layers.dropout(hidden, self.dropout, self.training)
 
             # Add residual connection
