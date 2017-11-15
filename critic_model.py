@@ -81,7 +81,7 @@ class Critic:
             block_size  = 0,
             output_size = 1999,
             dropout     = 0.5,
-            batch_norm  = False):
+            batch_norm  = True):
         """
         Create critic model.
 
