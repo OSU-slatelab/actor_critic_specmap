@@ -77,7 +77,6 @@ def run_training():
                 layer_size    = a.aunits,
                 layers        = a.alayers,
                 block_size    = a.ablock_size,
-                output_frames = output_frames,
                 dropout       = a.dropout,
                 batch_norm    = a.abatch_norm,
             )
