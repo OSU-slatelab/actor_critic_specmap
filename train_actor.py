@@ -33,14 +33,17 @@ parser.add_argument("--l2_weight", type=float, default=0)
 parser.add_argument("--mse_decay", type=float, default=0)
 parser.add_argument("--min_mse", type=float, default=0)
 parser.add_argument("--optim", default="adam")
+parser.add_argument("--match_all", default=False, action='store_true')
 
 # Model
 parser.add_argument("--alayers", type=int, default=2)
 parser.add_argument("--aunits", type=int, default=2048)
 parser.add_argument("--ablock_size", type=int, default=0)
+parser.add_argument("--abatch_norm", default=False, action='store_true')
 parser.add_argument("--clayers", type=int, default=6)
 parser.add_argument("--cunits", type=int, default=1024)
 parser.add_argument("--cblock_size", type=int, default=0)
+parser.add_argument("--cbatch_norm", default=False, action='store_true')
 parser.add_argument("--dropout", type=float, default=0.5, help="percentage of neurons to drop")
 
 # Data
@@ -76,6 +79,7 @@ def run_training():
                 block_size    = a.ablock_size,
                 output_frames = output_frames,
                 dropout       = a.dropout,
+                batch_norm    = a.abatch_norm,
             )
 
         # Define critic for generating outputs
@@ -87,7 +91,8 @@ def run_training():
                 layers      = a.clayers,
                 block_size  = a.cblock_size,
                 output_size = a.senones,
-                dropout     = a.dropout)
+                dropout     = a.dropout,
+                batch_norm  = a.cbatch_norm)
 
         # Define our critic model
         with tf.variable_scope('critic', reuse = True):
@@ -95,8 +100,10 @@ def run_training():
                 inputs      = actor.outputs,
                 layer_size  = a.cunits,
                 layers      = a.clayers,
+                block_size  = a.cblock_size,
                 output_size = a.senones,
-                dropout     = a.dropout)
+                dropout     = a.dropout,
+                batch_norm  = a.cbatch_norm)
 
         # Create loader for train data
         train_loader = DataLoader(
@@ -133,6 +140,7 @@ def run_training():
                 mse_decay       = a.mse_decay,
                 min_mse         = a.min_mse,
                 optim           = a.optim,
+                match_all       = a.match_all,
                 critic          = critic,
                 actor           = actor,
                 output_critic   = output_critic)
@@ -163,8 +171,8 @@ def run_training():
             # Run train ops
             feedback = trainer.run_ops(sess, train_loader, training = True)
             if a.mse_decay > 0 or a.min_mse > 0:
-                mse_loss, critic_loss, train_loss, duration = feedback
-                print('\nMSE loss: %.6f -- Critic loss: %.6f' % (mse_loss, critic_loss))
+                mse_loss, mimic_loss, train_loss, duration = feedback
+                print('\nMSE loss: %.6f -- Critic loss: %.6f' % (mse_loss, mimic_loss))
             else:
                 train_loss, duration = feedback
                 print()
@@ -174,12 +182,12 @@ def run_training():
             feedback = trainer.run_ops(sess, dev_loader, training = False)
             if a.mse_decay > 0 or a.min_mse > 0:
                 trainer.current_mse_weight *= a.mse_decay
-                mse_loss, critic_loss, eval_loss, duration = feedback
-                print('\nMSE loss: %.6f -- Critic loss: %.6f' % (mse_loss, critic_loss))
+                mse_loss, mimic_loss, eval_loss, duration = feedback
+                print('\nMSE loss: %.6f -- Critic loss: %.6f' % (mse_loss, mimic_loss))
 
-                if critic_loss < min_loss:
-                    min_loss = critic_loss
-                    save_file = os.path.join(a.actor_checkpoints, f"model-{critic_loss}.ckpt")
+                if mimic_loss < min_loss:
+                    min_loss = mimic_loss
+                    save_file = os.path.join(a.actor_checkpoints, f"model-{mimic_loss}.ckpt")
                     save_path = actor_saver.save(sess, save_file, global_step=epoch)
 
             else:
