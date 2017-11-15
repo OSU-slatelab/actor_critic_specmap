@@ -34,8 +34,7 @@ class Actor:
             layer_size = 2048,
             layers = 2,
             block_size = 0,
-            output_frames = 11,
-            dropout = 0.1,
+            dropout = 0.5,
             batch_norm = False):
         """
         Create actor model.
@@ -47,21 +46,21 @@ class Actor:
             The shape of the output, 3D tensor [batch size x frame count x output frame size]
          * layer_size : int
             Number of neurons per layer
-         * output_frames : int
-            Number of output frames (should be the same as input frames for critic)
+         * layers : int
+            Number of layers
+         * block_size : int
+            Number of layers per block (adds residual connection)
+         * dropout : float
+            Percent of nodes to drop when training
         """
 
         # Compute shape of input and output
         self.inputs = tf.placeholder(dtype = tf.float32, shape = input_shape, name = "inputs")
         self.input_shape = input_shape
-
-        # Batch size x frame count x frame size
         self.output_shape = output_shape
-        self.output_frames = output_frames
-        self.targets = tf.placeholder(dtype = tf.float32, shape = self.output_shape, name = "targets")
 
         # Every frame past the size of the output is a context frame
-        self.context_frames = self.input_shape[1] - output_frames
+        self.context_frames = input_shape[1] - output_shape[1]
 
         # Layer params
         self.dropout = dropout
@@ -84,7 +83,7 @@ class Actor:
 
         # Generate all the output frames
         output = [self._dnn_frame_output(self.inputs[:, i : i + self.context_frames + 1])
-                for i in range(self.output_frames)]
+                for i in range(self.output_shape[1])]
 
         # Stack the output frames into a single tensor
         self.outputs = tf.stack(output, axis = 1)

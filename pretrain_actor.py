@@ -55,7 +55,7 @@ def run_training():
             # Output of actor is input of critic, so output context plus frame
             output_frames = 1
             shape = (None, output_frames + 2*a.context, a.input_featdim)
-            output_shape = (None, output_frames + 2*a.context, a.output_featdim)
+            output_shape = (None, output_frames, a.output_featdim)
             actor = Actor(
                 input_shape   = shape,
                 output_shape  = output_shape,
