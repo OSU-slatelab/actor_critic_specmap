@@ -122,18 +122,10 @@ class Critic:
         # Flatten
         input_shape = self.inputs.get_shape().as_list()
         flat_len = input_shape[1] * input_shape[2]
-        inputs = tf.reshape(self.inputs, (-1, flat_len))
+        hidden = tf.reshape(self.inputs, (-1, flat_len))
+        self.layers = []
 
-        with tf.variable_scope("hidden0"):
-            hidden = feedforward_layer(inputs, (flat_len, self.layer_size))
-            self.layers = [hidden]
-            hidden = lrelu(hidden, 0.3)
-            hidden = tf.layers.dropout(hidden, self.dropout, self.training)
-        
-        # Store residual for connection
-        residual = hidden
-
-        for i in range(1, self.layer_count):
+        for i in range(self.layer_count):
             with tf.variable_scope("hidden%d" % i):
                 hidden = feedforward_layer(hidden, (self.layer_size, self.layer_size))
                 self.layers.append(hidden)
@@ -141,11 +133,6 @@ class Critic:
                 if self.batch_norm:
                     hidden = batch_norm(hidden, (self.layer_size, self.layer_size), self.training)
                 hidden = tf.layers.dropout(hidden, self.dropout, self.training)
-
-            # Add residual connection
-            if self.block_size != 0 and i % self.block_size == 0:
-                hidden = hidden + residual
-                residual = hidden
 
         with tf.variable_scope('output'):
             self.outputs = feedforward_layer(hidden, (self.layer_size, self.output_size))

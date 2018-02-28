@@ -53,7 +53,7 @@ def run_training():
         with tf.variable_scope('actor'):
 
             # Output of actor is input of critic, so output context plus frame
-            output_frames = 1
+            output_frames = 2*a.context + 1
             shape = (None, output_frames + 2*a.context, a.input_featdim)
             output_shape = (None, output_frames, a.output_featdim)
             actor = Actor(

@@ -8,16 +8,6 @@ Date:   Fall 2017
 """
 
 import tensorflow as tf
-from critic_model import batch_norm
-
-def prelu(_x):
-  alphas = tf.get_variable('alpha', _x.get_shape()[-1],
-                       initializer=tf.constant_initializer(0.0),
-                        dtype=tf.float32)
-  pos = tf.nn.relu(_x)
-  neg = alphas * (_x - abs(_x)) * 0.5
-
-  return pos + neg
 
 class Actor:
     """
@@ -32,9 +22,8 @@ class Actor:
             input_shape,
             output_shape,
             layer_size = 2048,
-            layers = 2,
-            block_size = 0,
-            dropout = 0.5,
+            layers     = 2,
+            dropout    = 0.5,
             batch_norm = True):
         """
         Create actor model.
@@ -91,24 +80,12 @@ class Actor:
     def _dnn_frame_output(self, inputs, reuse = True):
         """Generate the graph for a single frame of output"""
 
-        inputs = tf.reshape(inputs,
+        layer = tf.reshape(inputs,
                 shape = (-1, (self.context_frames + 1) * self.input_shape[2]))
 
-        inputs = tf.layers.dropout(inputs, self.dropout, self.training)
-
-        with tf.variable_scope('actor_layer0', reuse = reuse):
-            layer = self._dense(inputs)
-
-        # Store residual for bypass
-        residual = layer
-
-        for i in range(1, self.layers):
+        for i in range(self.layers):
             with tf.variable_scope('actor_layer' + str(i), reuse = reuse):
                 layer = self._dense(layer)
-
-                if self.block_size != 0 and i % self.block_size == 0:
-                    layer += residual
-                    residual = layer
 
         with tf.variable_scope('output_layer', reuse = reuse):
             output = tf.layers.dense(layer, self.output_shape[2])
@@ -119,21 +96,19 @@ class Actor:
         """Fully connected layer, with activation, dropout, and batch norm."""
 
         layer = tf.layers.dense(
-                inputs             = inputs,
-                units              = self.layer_size)
+            inputs     = inputs,
+            units      = self.layer_size,
+            activation = tf.nn.relu,
+        )
 
         if self.batch_norm:
-            layer = batch_norm(
-                    x        = layer,
-                    shape    = (self.layer_size, self.layer_size),
-                    training = self.training)
-
-        layer = prelu(layer)
+            layer = tf.layers.batch_normalization(layer)
 
         layer = tf.layers.dropout(
-                inputs   = layer,
-                rate     = self.dropout,
-                training = self.training)
+            inputs   = layer,
+            rate     = self.dropout,
+            training = self.training,
+        )
 
         return layer
 

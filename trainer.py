@@ -133,17 +133,19 @@ class Trainer:
         grads = tf.gradients(self.loss, self.var_list)
         grads, _ = tf.clip_by_global_norm(grads, clip_norm=self.max_global_norm)
         grad_var_pairs = zip(grads, self.var_list)
-        if self.optim == 'adam':
-            optim = tf.train.AdamOptimizer(self.learning_rate)
-            self.train = optim.apply_gradients(grad_var_pairs)
-        elif self.optim == 'adam_decay':
-            global_step = tf.Variable(0, trainable=False)
-            learning_rate = tf.train.exponential_decay(self.learning_rate, global_step, 1e4, 0.95)
-            optim = tf.train.AdamOptimizer(learning_rate)
-            self.train = optim.apply_gradients(grad_var_pairs, global_step=global_step)
-        else:
-            optim = tf.train.MomentumOptimizer(self.learning_rate, 0.9, use_nesterov=True)
-            self.train = optim.apply_gradients(grad_var_pairs)
+        update_ops = tf.get_collections(tf.train.UPDATE_OPS)
+        with tf.control_dependencies(update_ops):
+            if self.optim == 'adam':
+                optim = tf.train.AdamOptimizer(self.learning_rate)
+                self.train = optim.apply_gradients(grad_var_pairs)
+            elif self.optim == 'adam_decay':
+                global_step = tf.Variable(0, trainable=False)
+                learning_rate = tf.train.exponential_decay(self.learning_rate, global_step, 1e4, 0.95)
+                optim = tf.train.AdamOptimizer(learning_rate)
+                self.train = optim.apply_gradients(grad_var_pairs, global_step=global_step)
+            else:
+                optim = tf.train.MomentumOptimizer(self.learning_rate, 0.9, use_nesterov=True)
+                self.train = optim.apply_gradients(grad_var_pairs)
 
     def run_ops(self, sess, loader, training = True):
 
