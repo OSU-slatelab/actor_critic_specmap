@@ -55,7 +55,6 @@ class Actor:
         self.dropout = dropout
         self.layer_size = layer_size
         self.layers = layers
-        self.block_size = block_size
         self.batch_norm = batch_norm
 
         # Whether or not we're training

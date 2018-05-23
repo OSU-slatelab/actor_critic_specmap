@@ -33,7 +33,6 @@ parser.add_argument("--optim", default="adam_decay")
 # Model
 parser.add_argument("--clayers", type=int, default=7)
 parser.add_argument("--cunits", type=int, default=1024)
-parser.add_argument("--cblock_size", type=int, default=0)
 
 # Input
 parser.add_argument("--input_featdim", type=int, default=40)
@@ -59,7 +58,6 @@ def run_training():
                 inputs      = frame_placeholder,
                 layer_size  = a.cunits,
                 layers      = a.clayers,
-                block_size  = a.cblock_size,
                 output_size = a.senones,
                 dropout     = a.dropout)
 

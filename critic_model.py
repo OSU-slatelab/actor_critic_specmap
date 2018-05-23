@@ -78,7 +78,6 @@ class Critic:
             inputs,
             layer_size  = 1024,
             layers      = 7,
-            block_size  = 0,
             output_size = 1999,
             dropout     = 0.5,
             batch_norm  = True):
@@ -106,7 +105,6 @@ class Critic:
         self.dropout = dropout
         self.layer_size = layer_size
         self.layer_count = layers
-        self.block_size = block_size
         self.output_size = output_size
         self.batch_norm = batch_norm
         

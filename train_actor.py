@@ -38,11 +38,9 @@ parser.add_argument("--match_all", default=False, action='store_true')
 # Model
 parser.add_argument("--alayers", type=int, default=2)
 parser.add_argument("--aunits", type=int, default=2048)
-parser.add_argument("--ablock_size", type=int, default=0)
 parser.add_argument("--abatch_norm", default=False, action='store_true')
 parser.add_argument("--clayers", type=int, default=6)
 parser.add_argument("--cunits", type=int, default=1024)
-parser.add_argument("--cblock_size", type=int, default=0)
 parser.add_argument("--cbatch_norm", default=False, action='store_true')
 parser.add_argument("--dropout", type=float, default=0.5, help="percentage of neurons to drop")
 
@@ -76,7 +74,6 @@ def run_training():
                 output_shape  = actor_output_shape,
                 layer_size    = a.aunits,
                 layers        = a.alayers,
-                block_size    = a.ablock_size,
                 dropout       = a.dropout,
                 batch_norm    = a.abatch_norm,
             )
@@ -88,7 +85,6 @@ def run_training():
                 inputs      = clean_input,
                 layer_size  = a.cunits,
                 layers      = a.clayers,
-                block_size  = a.cblock_size,
                 output_size = a.senones,
                 dropout     = a.dropout,
                 batch_norm  = a.cbatch_norm)
@@ -99,7 +95,6 @@ def run_training():
                 inputs      = actor.outputs,
                 layer_size  = a.cunits,
                 layers      = a.clayers,
-                block_size  = a.cblock_size,
                 output_size = a.senones,
                 dropout     = a.dropout,
                 batch_norm  = a.cbatch_norm)
